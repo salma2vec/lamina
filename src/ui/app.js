@@ -118,9 +118,7 @@ export class App {
       p.plane = { axis: 'xy', offset: 0, tiltA: 0, tiltB: 0, ...(defaults.plane || {}) };
       p.slab = { n: 1, mode: 'mean' };
       const c = defaults.crop || {};
-      // Meshes: show the whole contour with a margin. Images: fit the shorter side.
-      const fit = s.kind === 'mesh' ? 0.85 : s.kind === 'image' ? (Math.max(s.size[0], s.size[1]) / Math.min(s.size[0], s.size[1])) * 1.01 : 1;
-      Object.assign(p.outline, { rotation: c.rotation || 0, zoom: c.zoom || fit, ox: c.ox || 0, oy: c.oy || 0 });
+      Object.assign(p.outline, { rotation: c.rotation || 0, zoom: c.zoom || this.fitZoom(), ox: c.ox || 0, oy: c.oy || 0 });
       p.levels = defaults.levels || (s.kind === 'mesh' ? 2 : 3);
       p.mapping = [];
       this.autoThresholds = true;
@@ -129,6 +127,24 @@ export class App {
     this.emit('source', s);
     this.emit('params');
     this.invalidate('slice');
+  }
+
+  /**
+   * Zoom that fits the cane window to the section of the source's bounding
+   * box on the current plane. Meshes show the whole section with a margin.
+   * Volumes and images fill the window, so the cane holds no empty border.
+   */
+  fitZoom() {
+    const s = this.source;
+    if (!s) return 1;
+    let w = s.size[0], h = s.size[1];
+    if (s.kind !== 'image') {
+      const f = this.frame;
+      w = 2 * halfExtentAlong(s.size, f.u);
+      h = 2 * halfExtentAlong(s.size, f.v);
+    }
+    const z = s.kind === 'mesh' ? (0.85 * s.ref) / Math.max(w, h) : (1.01 * s.ref) / Math.min(w, h);
+    return Math.round(Math.min(8, Math.max(0.5, z)) * 100) / 100;
   }
 
   /**
