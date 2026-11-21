@@ -64,6 +64,7 @@ function setView(v) {
 
 function refreshVisibility() {
   $('#views').classList.toggle('split', split);
+  document.body.classList.toggle('is-split', split);
   $('#split-toggle').setAttribute('aria-pressed', String(split));
   for (const [k, view] of Object.entries(views)) {
     const vis = isVisible(k);

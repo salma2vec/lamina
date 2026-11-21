@@ -120,6 +120,7 @@ input[type="checkbox"] { accent-color: var(--ink); margin: 0 6px 0 0; vertical-a
 .tabs [role="tab"] { border: none; border-bottom: 1px solid transparent; border-radius: 0; height: 30px; padding: 0 10px; color: var(--ink-2); }
 .tabs [role="tab"] kbd { border: none; padding: 0 3px 0 0; min-width: 0; color: var(--ink-3); }
 .tabs [role="tab"][aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent-ink); }
+.is-split .tabs [role="tab"][aria-selected="true"] { border-bottom-color: transparent; }
 .tabs .split { margin-left: 8px; height: 24px; color: var(--ink-2); }
 .tabs .split[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
 .actions { display: flex; gap: 6px; align-items: center; flex: 1 1 0; justify-content: flex-end; }
