@@ -50,7 +50,8 @@ export async function runExport(kind, app, ctx) {
   const base = slug(title(app));
   if (kind === 'session-load') { ctx.pickSession(); return null; }
   if (kind === 'session-save') {
-    const src = app.source ? { kind: app.source.kind, name: app.source.name, synthetic: app.source.synthetic } : null;
+    const s = app.source;
+    const src = s ? { kind: s.kind, name: s.name, synthetic: s.synthetic, scale: s.userScale } : null;
     const json = JSON.stringify(toSession(app.params, src), null, 2);
     download(new Blob([json], { type: 'application/json' }), `${base}-session.json`);
     return 'Session saved.';

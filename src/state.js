@@ -25,7 +25,8 @@ const KEYS = ['plane', 'slab', 'levels', 'thresholds', 'mapping', 'clean', 'outl
  * Serialise parameters and a source reference to a session object.
  * Volume and mesh data are never stored.
  * @param {Object} params
- * @param {{kind:string, name:string, synthetic?:{id:string, seed:number}}|null} source
+ * @param {{kind:string, name:string, synthetic?:{id:string, seed:number}, scale?:number}|null} source
+ *   scale: millimetres per voxel, pixel or mesh unit, when the user set it
  */
 export function toSession(params, source) {
   const out = { app: 'lamina', version: VERSION, saved: new Date().toISOString() };
@@ -33,6 +34,7 @@ export function toSession(params, source) {
     kind: source.kind,
     name: source.name,
     ...(source.synthetic ? { synthetic: source.synthetic } : { note: 'Source data is not stored. Load the same file again to restore the slice.' }),
+    ...(!source.synthetic && source.scale > 0 ? { scale: source.scale } : {}),
   } : null;
   for (const k of KEYS) out[k] = structuredClone(params[k]);
   return out;
@@ -80,6 +82,7 @@ export function fromSession(obj) {
       else if (typeof def === 'string') p[k][key] = typeof v === 'string' ? v : def;
     }
   }
-  const s = obj.source && typeof obj.source === 'object' ? obj.source : null;
+  const s = obj.source && typeof obj.source === 'object' ? { ...obj.source } : null;
+  if (s && !(typeof s.scale === 'number' && s.scale > 0 && Number.isFinite(s.scale))) delete s.scale;
   return { params: p, source: s };
 }

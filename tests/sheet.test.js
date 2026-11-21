@@ -114,6 +114,14 @@ test('session round trip keeps parameters and drops data', () => {
   assert.deepEqual(syn.source.synthetic, { id: 'ammonite', seed: 1 });
 });
 
+test('session keeps a voxel size the user typed for a file source', () => {
+  const p = defaultParams();
+  const s = JSON.parse(JSON.stringify(toSession(p, { kind: 'volume', name: 'stack.tif', scale: 0.025 })));
+  assert.equal(fromSession(s).source.scale, 0.025);
+  assert.equal(toSession(p, { kind: 'volume', name: 'Osteon bone', synthetic: { id: 'osteon', seed: 1 }, scale: 2 }).source.scale, undefined);
+  assert.equal(fromSession({ ...s, source: { ...s.source, scale: -1 } }).source.scale, undefined);
+});
+
 import { hashSeed, pickStudy, localDateString } from '../src/daily.js';
 
 test('daily study is deterministic per date', () => {
