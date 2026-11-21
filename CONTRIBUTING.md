@@ -87,3 +87,14 @@ A change is ready when:
 - Keep commits small, with short plain messages in the imperative: "Add NRRD parser", "Fix slice plane drift".
 - Open a pull request that says what changed, why, and how you tested it. Include before and after screenshots for any visible change, in light and dark mode. Link the issue if there is one.
 - Expect review comments on wording as well as code. Copy is part of the interface.
+- Issues labelled `ready` are scoped and open to work on. Take the oldest one unless another is marked `priority`.
+
+## Open work
+
+In rough order:
+
+1. Loading real archive exports: large TIFF stacks, NRRD with oblique space directions, Deflate TIFF, detached `.nhdr`. Clear progress, a cancel button and plain errors.
+2. Print accuracy: the build sheet must print at exactly 1:1 on A4 and Letter from Chrome, Firefox and Safari. Add a ruler strip to make this easy to check.
+3. Speed: slice, clean-up and render at 256³ in under 150 ms on a laptop, so sliders stay smooth.
+4. Mesh sections with more than two clays, for example by distance from the outer surface.
+5. Accessibility: every control reachable by keyboard, visible focus, AA contrast in both themes.

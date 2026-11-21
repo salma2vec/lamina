@@ -2,6 +2,8 @@
 
 Lamina turns fossil CT scans and 3D meshes into nerikomi cane designs. You load a volume, a mesh or a photographed thin section and cut it with a plane. Lamina sorts the section into two to six coloured clays, cleans it up to a size you can build, crops it to a cane outline and tiles the slices into a pattern. It then prints a 1:1 build sheet with clay masses, reduction and shrinkage. It runs in the browser from static files, with no build step and no network access. Five synthetic study volumes and a daily practice mode are included.
 
+I made Lamina for my own ceramics: nerikomi pieces built from fossil structures such as bone osteons, ammonite sutures and stromatolite layers. In nerikomi the pattern runs through the clay, the way structure runs through a fossil, so a CT section maps onto a cane quite directly.
+
 ![Lamina showing the 3D, slice, cane and pattern views of a synthetic osteon bone volume](docs/screenshot.png)
 
 ## Features
@@ -95,7 +97,7 @@ fired sizeᵢ = d × (1 − sᵢ / 100)
 warn when max sᵢ − min sᵢ > 1.5 percentage points (over the clays in use)
 ```
 
-The 1.5-point limit is a starting point, not a standard. [docs/CERAMICS.md](docs/CERAMICS.md) explains how to build a cane from the sheet, how to measure shrinkage and density, and how to test clay compatibility before you commit to a piece.
+The 1.5-point limit is a working default. No published standard sets it. [docs/CERAMICS.md](docs/CERAMICS.md) explains how to build a cane from the sheet, how to measure shrinkage and density, and how to test clay compatibility before you commit to a piece.
 
 ## Keyboard
 
