@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lamina</title>
+<meta name="description" content="Turn fossil CT scans and 3D meshes into nerikomi cane designs.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles/app.css">
+<link rel="stylesheet" href="styles/print.css" media="print">
+<style id="page-size">@page { size: A4; margin: 12mm; }</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="bar">
+    <div class="brand">
+      <span class="wordmark">Lamina</span>
+      <span class="specimen" id="specimen-title">No source</span>
+      <span class="tag" id="specimen-tag" hidden>synthetic study volume</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button role="tab" data-view="3d" aria-selected="false"><kbd>1</kbd>3D</button>
+      <button role="tab" data-view="slice" aria-selected="false"><kbd>2</kbd>Slice</button>
+      <button role="tab" data-view="cane" aria-selected="true"><kbd>3</kbd>Cane</button>
+      <button role="tab" data-view="pattern" aria-selected="false"><kbd>4</kbd>Pattern</button>
+      <button class="split" id="split-toggle" aria-pressed="false" title="Show all four views (G)">Split</button>
+    </nav>
+    <div class="actions">
+      <button id="open-today">Today</button>
+      <div class="menu-wrap">
+        <button id="export-toggle" aria-haspopup="true" aria-expanded="false">Export</button>
+        <div class="menu" id="export-menu" hidden>
+          <button data-export="svg">Cane SVG, 1:1 <span>mm</span></button>
+          <button data-export="png-cane">Cane PNG</button>
+          <button data-export="png-pattern">Pattern PNG</button>
+          <hr>
+          <button data-export="print-a4">Print build sheet, A4</button>
+          <button data-export="print-letter">Print build sheet, Letter</button>
+          <hr>
+          <button data-export="session-save">Save session <span>S</span></button>
+          <button data-export="session-load">Load session</button>
+        </div>
+      </div>
+      <button id="help-toggle" class="icon" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">?</button>
+    </div>
+  </header>
+
+  <aside class="rail left" aria-label="Source and slice">
+    <section class="panel">
+      <h2>Source</h2>
+      <label class="drop" id="drop">
+        <input type="file" id="file-input" multiple accept=".stl,.ply,.obj,.nrrd,.tif,.tiff,.png,.jpg,.jpeg,.webp,.json">
+        <span class="drop-main">Drop a mesh, volume or image here.</span>
+        <span class="drop-sub">Or click to choose files.</span>
+        <span class="drop-formats">STL, PLY, OBJ &middot; NRRD &middot; TIFF stack &middot; image slices &middot; single image</span>
+      </label>
+      <div class="status" id="status" hidden>
+        <span id="status-text"></span>
+        <div class="progress"><div id="progress-bar"></div></div>
+      </div>
+      <p class="error" id="error" role="alert" hidden></p>
+      <p class="note" id="session-note" hidden></p>
+      <dl class="facts" id="source-facts"></dl>
+      <div class="field" id="scale-field" hidden>
+        <label for="scale-input" id="scale-label">Voxel size</label>
+        <span class="unit-input"><input type="number" id="scale-input" min="0" step="0.001" placeholder="unknown"><span>mm</span></span>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Study volumes</h2>
+      <ul class="specimens" id="specimen-list"></ul>
+    </section>
+    <section class="panel" id="plane-panel">
+      <h2>Slice plane</h2>
+      <div class="seg" role="radiogroup" aria-label="Plane axis" id="axis-seg">
+        <button data-axis="xy" role="radio">XY</button>
+        <button data-axis="xz" role="radio">XZ</button>
+        <button data-axis="yz" role="radio">YZ</button>
+      </div>
+      <div class="field range">
+        <label for="plane-offset">Offset</label>
+        <input type="range" id="plane-offset" data-key="plane.offset" min="-64" max="64" step="0.5">
+        <output data-out="plane.offset" data-unit="len"></output>
+      </div>
+      <div class="field range">
+        <label for="plane-tilta">Tilt A</label>
+        <input type="range" id="plane-tilta" data-key="plane.tiltA" min="-80" max="80" step="0.5">
+        <output data-out="plane.tiltA" data-unit="deg"></output>
+      </div>
+      <div class="field range">
+        <label for="plane-tiltb">Tilt B</label>
+        <input type="range" id="plane-tiltb" data-key="plane.tiltB" min="-80" max="80" step="0.5">
+        <output data-out="plane.tiltB" data-unit="deg"></output>
+      </div>
+      <div class="vol-only">
+        <div class="field range">
+          <label for="slab-n">Slab</label>
+          <input type="range" id="slab-n" data-key="slab.n" min="1" max="32" step="1">
+          <output data-out="slab.n" data-unit="vox"></output>
+        </div>
+        <div class="seg small" role="radiogroup" aria-label="Slab projection" id="slab-seg">
+          <button data-slab="mean" role="radio">Average</button>
+          <button data-slab="max" role="radio">Maximum</button>
+        </div>
+      </div>
+      <div class="row-buttons">
+        <button id="random-plane" title="Random plane (R)">Random plane</button>
+        <button id="reset-plane">Reset</button>
+      </div>
+      <p class="hint">Arrow keys move the plane. Shift with left and right changes tilt B.</p>
+    </section>
+  </aside>
+
+  <main class="stage" id="stage">
+    <div class="views" id="views">
+      <section class="view" data-view="3d" id="view-3d"><div class="cap" id="cap-3d"></div><div class="gl" id="gl"></div></section>
+      <section class="view" data-view="slice" id="view-slice"><div class="cap" id="cap-slice"></div><canvas id="slice-canvas"></canvas></section>
+      <section class="view" data-view="cane" id="view-cane"><div class="cap" id="cap-cane"></div><canvas id="cane-canvas"></canvas></section>
+      <section class="view" data-view="pattern" id="view-pattern">
+        <div class="cap" id="cap-pattern"></div>
+        <canvas id="pattern-canvas"></canvas>
+        <div class="toolbar" id="pattern-toolbar">
+          <label>Layout <select data-key="pattern.layout" id="pattern-layout"></select></label>
+          <label>Rotation <select data-key="pattern.alternate" id="pattern-alt"></select></label>
+          <label class="tr">Stretch <input type="range" data-key="pattern.stretch" min="1" max="3" step="0.05"><output data-out="pattern.stretch" data-unit="x"></output></label>
+          <label class="tr">Axis <input type="range" data-key="pattern.stretchAngle" min="0" max="180" step="5"><output data-out="pattern.stretchAngle" data-unit="deg"></output></label>
+          <label class="tr">Tile <input type="range" data-key="pattern.tile" min="0.12" max="0.6" step="0.01"></label>
+          <label class="tr">Gap <input type="range" data-key="pattern.gap" min="0" max="0.4" step="0.01"></label>
+          <label class="check"><input type="checkbox" data-key="pattern.jitter"> Jitter</label>
+          <span class="seg small" id="preview-seg"><button data-preview="slab">Slab</button><button data-preview="vessel">Vessel</button></span>
+        </div>
+      </section>
+    </div>
+    <div class="empty" id="empty" hidden>
+      <p class="serif">Choose a study volume or drop a file.</p>
+      <p>Lamina slices a fossil scan or mesh and turns the section into a nerikomi cane: clay levels, an outline, a pattern and a build sheet.</p>
+    </div>
+  </main>
+
+  <aside class="rail right" aria-label="Cane design">
+    <section class="panel">
+      <h2>Levels</h2>
+      <div class="seg" role="radiogroup" aria-label="Number of clays" id="levels-seg">
+        <button data-levels="2">2</button><button data-levels="3">3</button><button data-levels="4">4</button><button data-levels="5">5</button><button data-levels="6">6</button>
+      </div>
+      <canvas class="hist" id="hist" height="96"></canvas>
+      <div class="row-buttons">
+        <button id="auto-thresholds" title="Set thresholds by k-means">Auto thresholds</button>
+        <button id="invert-mapping">Invert clays</button>
+      </div>
+      <ol class="level-list" id="level-list"></ol>
+    </section>
+    <section class="panel">
+      <h2>Clean-up</h2>
+      <div class="field range">
+        <label for="clean-median">Majority</label>
+        <input type="range" id="clean-median" data-key="clean.median" min="0" max="4" step="1">
+        <output data-out="clean.median" data-unit="px"></output>
+      </div>
+      <div class="field range">
+        <label for="clean-oc">Open/close</label>
+        <input type="range" id="clean-oc" data-key="clean.openClose" min="0" max="4" step="1">
+        <output data-out="clean.openClose" data-unit="px"></output>
+      </div>
+      <div class="field range">
+        <label for="clean-smooth">Smooth</label>
+        <input type="range" id="clean-smooth" data-key="clean.smooth" min="0" max="4" step="0.25">
+        <output data-out="clean.smooth" data-unit="px"></output>
+      </div>
+      <div class="field range">
+        <label for="clean-min">Min. feature</label>
+        <input type="range" id="clean-min" data-key="clean.minFeature" min="0" max="8" step="0.1">
+        <output data-out="clean.minFeature" data-unit="mm"></output>
+      </div>
+      <p class="hint">Regions narrower than the minimum feature, at build size, merge into their neighbours. This removes specks and fills pinholes.</p>
+    </section>
+    <section class="panel">
+      <h2>Outline</h2>
+      <div class="seg shapes" role="radiogroup" aria-label="Cane outline" id="shape-seg"></div>
+      <div class="field range loaf-only">
+        <label for="outline-aspect">Height</label>
+        <input type="range" id="outline-aspect" data-key="outline.aspect" min="0.3" max="1" step="0.01">
+        <output data-out="outline.aspect" data-unit="ratio"></output>
+      </div>
+      <div class="field range">
+        <label for="outline-rot">Rotation</label>
+        <input type="range" id="outline-rot" data-key="outline.rotation" min="-180" max="180" step="1">
+        <output data-out="outline.rotation" data-unit="deg"></output>
+      </div>
+      <div class="field range">
+        <label for="outline-zoom">Zoom</label>
+        <input type="range" id="outline-zoom" data-key="outline.zoom" min="0.5" max="8" step="0.01">
+        <output data-out="outline.zoom" data-unit="x"></output>
+      </div>
+      <div class="field range">
+        <label for="outline-ox">Offset X</label>
+        <input type="range" id="outline-ox" data-key="outline.ox" min="-64" max="64" step="0.5">
+        <output data-out="outline.ox" data-unit="len"></output>
+      </div>
+      <div class="field range">
+        <label for="outline-oy">Offset Y</label>
+        <input type="range" id="outline-oy" data-key="outline.oy" min="-64" max="64" step="0.5">
+        <output data-out="outline.oy" data-unit="len"></output>
+      </div>
+      <p class="hint">Drag in the Slice or Cane view to move the section. Scroll to zoom.</p>
+    </section>
+    <section class="panel">
+      <h2>Clay</h2>
+      <select id="palette-preset" aria-label="Palette preset"></select>
+      <ul class="swatches" id="swatch-list"></ul>
+      <button id="add-swatch">Add clay</button>
+    </section>
+    <section class="panel">
+      <h2>Build sheet</h2>
+      <div class="grid2">
+        <label>Cane size <span class="unit-input"><input type="number" data-key="cane.size" min="5" max="400" step="1"><span>mm</span></span></label>
+        <label>Length <span class="unit-input"><input type="number" data-key="cane.length" min="5" max="1000" step="5"><span>mm</span></span></label>
+        <label>Reduce to <span class="unit-input"><input type="number" data-key="cane.target" min="1" max="400" step="0.5"><span>mm</span></span></label>
+        <label>Warn below <span class="unit-input"><input type="number" data-key="cane.minReduced" min="0" max="20" step="0.1"><span>mm</span></span></label>
+        <label>Wet density <span class="unit-input"><input type="number" data-key="cane.density" min="0.5" max="4" step="0.05"><span>g/cm³</span></span></label>
+        <label>Waste <span class="unit-input"><input type="number" data-key="cane.waste" min="0" max="100" step="1"><span>%</span></span></label>
+      </div>
+      <div class="sheet" id="sheet"></div>
+    </section>
+  </aside>
+</div>
+
+<div class="overlay" id="help" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+  <div class="sheet-card">
+    <h2 id="help-title">Keyboard</h2>
+    <table class="keys">
+      <tr><td><kbd>1</kbd>&ndash;<kbd>4</kbd></td><td>Show 3D, Slice, Cane or Pattern</td></tr>
+      <tr><td><kbd>G</kbd></td><td>Show all four views</td></tr>
+      <tr><td><kbd>&uarr;</kbd> <kbd>&darr;</kbd></td><td>Move the plane along its normal</td></tr>
+      <tr><td><kbd>&larr;</kbd> <kbd>&rarr;</kbd></td><td>Change tilt A. Hold Shift for tilt B.</td></tr>
+      <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>Slab thickness in Slice and 3D. Clay levels in Cane and Pattern.</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Random plane</td></tr>
+      <tr><td><kbd>T</kbd></td><td>Open Today</td></tr>
+      <tr><td><kbd>S</kbd></td><td>Save session</td></tr>
+      <tr><td><kbd>E</kbd></td><td>Open the export menu</td></tr>
+      <tr><td><kbd>?</kbd></td><td>Show this list</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Close</td></tr>
+    </table>
+    <button class="close" data-close="help">Close</button>
+  </div>
+</div>
+
+<div class="today" id="today" hidden role="dialog" aria-modal="true" aria-labelledby="today-title">
+  <header class="today-bar">
+    <span class="wordmark">Lamina</span>
+    <span class="today-date" id="today-date"></span>
+    <span class="spacer"></span>
+    <button id="today-random">Random</button>
+    <button id="today-open">Open in editor</button>
+    <button data-close="today">Close</button>
+  </header>
+  <div class="today-body">
+    <figure class="today-figure">
+      <div class="today-canvases">
+        <canvas id="today-slice"></canvas>
+        <canvas id="today-cane" hidden></canvas>
+      </div>
+      <figcaption>
+        <h1 class="serif" id="today-title">&nbsp;</h1>
+        <p class="today-desc" id="today-desc"></p>
+        <p class="tag">synthetic study volume</p>
+        <p class="today-plane mono" id="today-plane"></p>
+      </figcaption>
+    </figure>
+    <aside class="today-side">
+      <div class="timer mono" id="timer" aria-live="off">10:00</div>
+      <div class="timer-line"><div id="timer-progress"></div></div>
+      <div class="seg" id="duration-seg" role="radiogroup" aria-label="Duration">
+        <button data-min="5">5</button><button data-min="10">10</button><button data-min="20">20</button><button data-min="30">30</button>
+      </div>
+      <div class="row-buttons">
+        <button id="timer-start" class="primary">Start</button>
+        <button id="timer-reset">Reset</button>
+      </div>
+      <label class="check"><input type="checkbox" id="timer-chime"> Chime at the end</label>
+      <ol class="today-steps">
+        <li>Look at the section. Find two or three structures that carry it.</li>
+        <li>Sketch a cane that shows them with <span id="today-levels">three</span> clays.</li>
+        <li>Stop when the timer ends.</li>
+      </ol>
+      <button id="today-reveal">Reveal</button>
+    </aside>
+  </div>
+</div>
+
+<input type="file" id="session-input" accept=".json,application/json" hidden>
+<section id="print-sheet" aria-hidden="true"></section>
+<div class="toast" id="toast" role="status" hidden></div>
+<noscript><p class="noscript">Lamina needs JavaScript and ES modules.</p></noscript>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
