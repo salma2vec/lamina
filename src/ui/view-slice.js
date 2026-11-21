@@ -102,7 +102,7 @@ export class SliceView {
     const p = app.params;
     const unit = app.unit;
     this.cap.innerHTML = s.kind === 'image'
-      ? `<b>Slice</b>image &middot; ${s.image.w} &times; ${s.image.h} px`
+      ? `<b>Slice</b>image &middot; ${s.image.sourceW || s.image.w} &times; ${s.image.sourceH || s.image.h} px`
       : `<b>Slice</b>${p.plane.axis.toUpperCase()} &middot; ${fx(p.plane.offset)} ${unit} &middot; tilt ${fx(p.plane.tiltA)}&deg; / ${fx(p.plane.tiltB)}&deg;${s.kind === 'volume' && p.slab.n > 1 ? ` &middot; slab ${p.slab.n} ${p.slab.mode === 'max' ? 'max' : 'avg'}` : ''}`;
     if (!sl || !this.img) {
       ctx.fillStyle = cssVar('--ink-2');

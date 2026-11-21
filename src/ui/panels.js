@@ -98,7 +98,10 @@ export function renderFacts(root, app) {
     add('Triangles', s.mesh.triangles.toLocaleString('en'));
     add('Size', s.size.map((x) => fx(x, 1)).join(' × ') + ' mm');
   } else {
+    const im = s.image;
     add('Type', 'Image');
-    add('Pixels', `${s.image.w} × ${s.image.h}`);
+    if (im.factor > 1.001) add('Source', `${im.sourceW} × ${im.sourceH}`);
+    add('Pixels', `${im.w} × ${im.h}`);
+    if (s.unitKnown) add('Pixel size', `${fx(s.pixelSize / (im.factor || 1), 4)} mm`);
   }
 }

@@ -61,7 +61,14 @@ export class Today {
     $('#today-levels').textContent = WORDS[pick.spec.levels] || 'three';
     const pl = pick.plane;
     $('#today-plane').textContent = `${pl.axis.toUpperCase()}  offset ${fx(pl.offset, 1)} vox  tilt ${pl.tiltA}° / ${pl.tiltB}°  rotation ${pick.crop.rotation}°`;
-    const vol = await syntheticVolume(pick.id, 1);
+    let vol;
+    try {
+      vol = await syntheticVolume(pick.id, 1);
+    } catch (err) {
+      // The editor may have cancelled a shared generation job. Start it again.
+      if (!err.cancelled) throw err;
+      vol = await syntheticVolume(pick.id, 1);
+    }
     if (this.pick !== pick) return;
     const frame = planeFrame(pl);
     const half = planeBoxHalfExtent([128, 128, 128], frame) || 64;

@@ -8,7 +8,7 @@ import { CaneView } from './ui/view-cane.js';
 import { PatternView } from './ui/view-pattern.js';
 import { Histogram } from './ui/histogram.js';
 import { renderLevels, renderPalette, renderSheet, renderFacts } from './ui/panels.js';
-import { loadFiles, syntheticVolume } from './ui/loader.js';
+import { loadFiles, syntheticVolume, cancelLoad } from './ui/loader.js';
 import { runExport } from './ui/export.js';
 import { Today } from './ui/today.js';
 import { installShortcuts } from './ui/shortcuts.js';
@@ -43,6 +43,11 @@ function showError(msg) {
   const e = $('#error');
   e.textContent = msg;
   e.hidden = !msg;
+}
+function showNote(msg) {
+  const n = $('#source-note');
+  n.textContent = msg;
+  n.hidden = !msg;
 }
 function progress(p, label) {
   $('#status').hidden = p === null;
@@ -183,36 +188,71 @@ for (const s of SPECIMENS) {
   specimenList.append(el('li', {}, [b]));
 }
 
+/* Each load gets a number. A load that a newer one replaced is cancelled, and its result is ignored. */
+let loadSeq = 0;
+/** Parameters (and scale) from a session whose source file has not been loaded yet. */
+let pendingSession = null;
+let pendingScale = null;
+
+function beginLoad(label) {
+  cancelLoad();
+  showError('');
+  progress(0, label);
+  return ++loadSeq;
+}
+
+function loadFailed(seq, err) {
+  if (seq !== loadSeq) return;
+  progress(null);
+  app.keepParams = false;
+  if (err && err.cancelled) { toast('Loading cancelled.'); return; }
+  showError((err && err.message) || 'The file could not be read.');
+}
+
 async function loadSynthetic(id, overrides) {
   const spec = SPECIMENS.find((s) => s.id === id);
-  showError('');
-  progress(0, `Generating ${spec.name.toLowerCase()}`);
+  const label = `Generating ${spec.name.toLowerCase()}`;
+  const seq = beginLoad(label);
   try {
-    const volume = await syntheticVolume(id, 1, (p) => progress(p, `Generating ${spec.name.toLowerCase()}`));
+    const volume = await syntheticVolume(id, 1, (p) => seq === loadSeq && progress(p, label), true);
+    if (seq !== loadSeq) return;
     progress(null);
+    showNote('');
+    pendingSession = pendingScale = null;
     const defaults = overrides || { plane: spec.plane, crop: spec.crop, levels: spec.levels };
     app.setSource({ kind: 'volume', name: spec.name, synthetic: { id, seed: 1 }, volume }, defaults);
   } catch (err) {
-    progress(null);
-    showError(err.message);
+    loadFailed(seq, err);
   }
 }
 
 async function handleFiles(files) {
   if (!files || !files.length) return;
-  showError('');
-  progress(0, 'Reading');
+  const seq = beginLoad('Reading');
   try {
-    const r = await loadFiles(files, (p, label) => progress(p, label));
+    const r = await loadFiles(files, (p, label) => seq === loadSeq && progress(p, label));
+    if (seq !== loadSeq) return;
     progress(null);
     if (r.kind === 'session') { applySession(r.session); return; }
+    const session = pendingSession, scale = pendingScale;
+    pendingSession = pendingScale = null;
+    if (session) {
+      // The session saved earlier for this file: keep its parameters.
+      app.params = session;
+      app.autoThresholds = app.params.thresholds.length === 0;
+      app.keepParams = true;
+      drawPalette();
+    }
+    showNote(r.warning || '');
     app.setSource(r);
-    if (r.kind === 'image' && r.spacing) app.setScale(r.spacing);
+    if (r.kind === 'image' && r.spacing) app.setScale(r.spacing, !!session);
+    if (scale) app.setScale(scale, true);
   } catch (err) {
-    progress(null);
-    showError(err.message || 'The file could not be read.');
+    loadFailed(seq, err);
   }
 }
+
+$('#cancel-load').addEventListener('click', () => cancelLoad());
 
 $('#file-input').addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
 const drop = $('#drop');
@@ -246,8 +286,7 @@ app.on('source', (s) => {
   sf.hidden = !showScale;
   if (showScale) {
     $('#scale-label').textContent = s.kind === 'mesh' ? 'Mesh unit' : s.kind === 'image' ? 'Pixel size' : 'Voxel size';
-    $('#scale-input').value = s.kind === 'mesh' ? (s.meshScale || 1) : s.unitKnown ? (s.kind === 'image' ? s.pixelSize : s.volume.spacing[0] / s.volume.factor[0]) : '';
-    if (s.unitKnown) s.userScale = true;
+    $('#scale-input').value = s.kind === 'mesh' ? (s.meshScale || 1) : s.unitKnown ? +(s.kind === 'image' ? s.pixelSize / (s.image.factor || 1) : s.volume.spacing[0] / s.volume.factor[0]).toPrecision(6) : '';
   }
   views['3d'].setSource(s);
 });
@@ -257,19 +296,20 @@ app.on('source', (s) => {
 function applySession(obj) {
   let r;
   try { r = fromSession(obj); } catch (err) { showError(err.message); return; }
-  const note = $('#session-note');
   app.params = r.params;
   app.autoThresholds = r.params.thresholds.length === 0;
   drawPalette();
   if (r.source && r.source.synthetic && SPECIMENS.some((s) => s.id === r.source.synthetic.id)) {
-    note.hidden = true;
+    showNote('');
     app.keepParams = true;
     loadSynthetic(r.source.synthetic.id);
+    // loadSynthetic clears pending state; keepParams carries the session into setSource.
   } else {
-    note.hidden = false;
-    note.textContent = r.source ? `Session loaded. Load "${r.source.name}" again to restore the slice. Its data is not stored in the session.` : 'Session loaded.';
-    app.keepParams = true;
-    if (app.source) { app.keepParams = false; app.invalidate('slice'); }
+    showNote(r.source ? `Session loaded. Load "${r.source.name}" again to restore the slice. Its data is not stored in the session.` : 'Session loaded.');
+    // Show the session on the current source now, and apply it again to the next file loaded.
+    pendingSession = r.source ? structuredClone(r.params) : null;
+    pendingScale = r.source && r.source.scale ? r.source.scale : null;
+    if (app.source) app.invalidate('slice');
   }
   syncAll();
   toast('Session loaded.');
@@ -316,7 +356,7 @@ const today = new Today((pick) => loadSynthetic(pick.id, { plane: pick.plane, cr
 $('#open-today').addEventListener('click', () => today.open());
 
 installShortcuts({
-  escape: () => { if (!help.hidden) help.hidden = true; else if (!menu.hidden) toggleMenu(false); else if (today.isOpen) today.close(); },
+  escape: () => { if (!help.hidden) help.hidden = true; else if (!menu.hidden) toggleMenu(false); else if (today.isOpen) today.close(); else cancelLoad(); },
   view: (e) => { if (!today.isOpen) setView(['3d', 'slice', 'cane', 'pattern'][+e.key - 1]); },
   offset: (e) => {
     if (today.isOpen || !app.source || app.source.kind === 'image') return;

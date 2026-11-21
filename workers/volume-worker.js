@@ -1,6 +1,6 @@
 /**
  * Decodes volume files and downsamples them to at most 256 voxels per side.
- * Messages in:  { job, kind: 'mesh'|'nrrd'|'tiff'|'sequence', format?, files: File[] }
+ * Messages in:  { job, kind: 'mesh'|'nrrd'|'tiff'|'sequence'|'image', format?, files: File[] }
  * Messages out: { job, type: 'progress', p, label } | { job, type: 'done', result } | { job, type: 'error', message }
  */
 import { parseNRRD } from '../src/io/nrrd.js';
@@ -24,6 +24,7 @@ self.onmessage = async (e) => {
     else if (kind === 'nrrd') result = await loadNRRD(files[0], progress);
     else if (kind === 'tiff') result = await loadTIFF(files[0], progress);
     else if (kind === 'sequence') result = await loadSequence(files, progress);
+    else if (kind === 'image') result = await loadImage(files[0], progress);
     else throw new Error(`Unknown volume kind "${kind}".`);
     const transfer = result.type === 'mesh' ? [result.mesh.positions.buffer, result.mesh.indices.buffer]
       : [result.type === 'volume' ? result.volume.data.buffer : result.image.data.buffer];
@@ -36,8 +37,9 @@ self.onmessage = async (e) => {
 async function loadMesh(file, format, progress) {
   progress(0.1, 'Reading mesh');
   const buf = await file.arrayBuffer();
+  const warnings = [];
   const parse = { stl: parseSTL, ply: parsePLY, obj: parseOBJ }[format];
-  const soup = parse(buf);
+  const soup = parse(buf, (msg) => warnings.push(msg));
   for (let i = 0; i < soup.length; i++) if (!Number.isFinite(soup[i])) throw new Error('The mesh contains invalid coordinates.');
   progress(0.6, 'Welding vertices');
   const m = weldMesh(soup);
@@ -46,14 +48,33 @@ async function loadMesh(file, format, progress) {
   const P = m.positions;
   for (let i = 0; i < P.length; i += 3) { P[i] -= c[0]; P[i + 1] -= c[1]; P[i + 2] -= c[2]; }
   const size = m.max.map((v, k) => Math.max(v - m.min[k], 1e-6));
-  return { type: 'mesh', mesh: { positions: P, indices: m.indices, size, triangles: m.indices.length / 3, vertices: P.length / 3 } };
+  return { type: 'mesh', mesh: { positions: P, indices: m.indices, size, triangles: m.indices.length / 3, vertices: P.length / 3 }, warning: warnings[0] || null };
+}
+
+/**
+ * Normalise and downsample a 2D plane for the cane step. The image records
+ * its source size and how many source pixels make one working pixel.
+ */
+function asImage(plane, w, h, sourceW = w, sourceH = h) {
+  const image = imageFromPlane(plane, w, h, 1024);
+  image.sourceW = sourceW;
+  image.sourceH = sourceH;
+  image.factor = sourceW / image.w;
+  return image;
+}
+
+async function loadImage(file, progress) {
+  progress(0.2, 'Decoding image');
+  const g = await decodeImageGrey(file, 4096);
+  progress(0.7, 'Decoding image');
+  return { type: 'image', image: asImage(g.data, g.width, g.height, g.sourceWidth, g.sourceHeight), spacing: null };
 }
 
 async function loadNRRD(file, progress) {
   progress(0, 'Reading NRRD');
   const v = await parseNRRD(await file.arrayBuffer());
   const [nx, ny, nz] = v.dims;
-  if (nz === 1) return { type: 'image', image: imageFromPlane(v.data, nx, ny), spacing: v.spacing ? v.spacing[0] : null };
+  if (nz === 1) return { type: 'image', image: asImage(v.data, nx, ny), spacing: v.spacing ? v.spacing[0] : null };
   progress(0.05, 'Downsampling');
   const volume = buildVolume(v.dims, v.data, v.spacing, MAX, (p) => progress(0.05 + p * 0.95, 'Downsampling'));
   return { type: 'volume', volume, sourceType: v.type };
@@ -79,8 +100,7 @@ async function loadTIFF(file, progress) {
   const first = tiffPage(buf, pages, 0);
   const px = meta.pixelSize;
   if (pages.length === 1) {
-    const image = imageFromPlane(first.data, first.width, first.height);
-    return { type: 'image', image, spacing: px };
+    return { type: 'image', image: asImage(first.data, first.width, first.height), spacing: px };
   }
   const b = new VolumeBuilder(first.width, first.height, pages.length, MAX);
   b.addSlice(0, first.data);

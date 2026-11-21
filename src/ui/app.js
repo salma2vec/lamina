@@ -17,6 +17,12 @@ import { computeSheet } from '../sheet/quantities.js';
 
 export const STAGES = ['slice', 'crop', 'quant', 'clean', 'render', 'sheet', 'pattern'];
 
+/**
+ * Size of one working pixel of an image source: millimetres when the pixel
+ * size is known, otherwise source pixels (the working image may be downsampled).
+ */
+const imagePixel = (s) => s.pixelSize || s.image.factor || 1;
+
 /** Which stage a parameter path invalidates. */
 export function stageFor(key) {
   if (key.startsWith('plane.') || key.startsWith('slab.')) return 'slice';
@@ -101,7 +107,7 @@ export class App {
       s.unitKnown = true;
       s.meshScale = s.meshScale || 1;
     } else {
-      const px = s.pixelSize || 1;
+      const px = imagePixel(s);
       s.size = [s.image.w * px, s.image.h * px, 0];
       s.unitKnown = !!s.pixelSize;
     }
@@ -125,10 +131,16 @@ export class App {
     this.invalidate('slice');
   }
 
-  /** Change the physical scale of the current source (mm per voxel, pixel or mesh unit). */
-  setScale(mmPerUnit) {
+  /**
+   * Change the physical scale of the current source (mm per voxel, pixel or mesh unit).
+   * @param {number} mmPerUnit
+   * @param {boolean} [keepParams] leave plane and section offsets as they are
+   *   (they already use the new unit, as in a saved session)
+   */
+  setScale(mmPerUnit, keepParams = false) {
     const s = this.source;
     if (!s || !(mmPerUnit > 0)) return;
+    s.userScale = mmPerUnit;
     const old = s.ref;
     if (s.kind === 'volume') {
       const f = s.volume.factor || [1, 1, 1];
@@ -143,15 +155,18 @@ export class App {
       s.size = s.mesh.size.slice();
       s.meshScale = mmPerUnit;
     } else {
-      s.pixelSize = mmPerUnit;
-      s.size = [s.image.w * mmPerUnit, s.image.h * mmPerUnit, 0];
+      // mmPerUnit is the size of one source pixel; the working image may be downsampled.
+      s.pixelSize = mmPerUnit * (s.image.factor || 1);
+      s.size = [s.image.w * s.pixelSize, s.image.h * s.pixelSize, 0];
     }
     s.unitKnown = true;
     s.ref = Math.max(...s.size);
-    const k = s.ref / old;
-    this.params.plane.offset *= k;
-    this.params.outline.ox *= k;
-    this.params.outline.oy *= k;
+    if (!keepParams) {
+      const k = s.ref / old;
+      this.params.plane.offset *= k;
+      this.params.outline.ox *= k;
+      this.params.outline.oy *= k;
+    }
     this.emit('source', s);
     this.emit('params');
     this.invalidate('slice');
@@ -174,7 +189,7 @@ export class App {
     this.d.slice = null;
     if (!s) return;
     if (s.kind === 'image') {
-      this.d.slice = { data: s.image.data, w: s.image.w, h: s.image.h, px: s.pixelSize || 1, loops: null };
+      this.d.slice = { data: s.image.data, w: s.image.w, h: s.image.h, px: imagePixel(s), loops: null };
       return;
     }
     const frame = this.frame;

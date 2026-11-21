@@ -1,10 +1,12 @@
-/** Loads sources through workers, with progress and friendly errors. */
+/** Loads sources through workers, with progress, cancellation and plain errors. */
 import { classifyFiles } from '../io/detect.js';
 import { decodeImageGrey } from '../io/images.js';
 import { imageFromPlane } from '../volume/volume.js';
 
 let jobId = 0;
 const workers = {};
+/** Jobs that cancelLoad() may stop: job id -> {name, fail}. */
+const tracked = new Map();
 
 function worker(name) {
   if (!workers[name]) workers[name] = new Worker(new URL(`../../workers/${name}.js`, import.meta.url), { type: 'module' });
@@ -16,30 +18,54 @@ function worker(name) {
  * @param {string} name worker file name without extension
  * @param {Object} msg message (job id is added)
  * @param {(p:number, label?:string)=>void} [onProgress]
+ * @param {boolean} [cancellable] let cancelLoad() stop this job
  */
-export function runJob(name, msg, onProgress) {
+export function runJob(name, msg, onProgress, cancellable = false) {
   const w = worker(name);
   const job = ++jobId;
   return new Promise((resolve, reject) => {
+    const done = () => {
+      w.removeEventListener('message', handler);
+      w.removeEventListener('error', onErr);
+      tracked.delete(job);
+    };
     const handler = (e) => {
       if (e.data.job !== job) return;
       if (e.data.type === 'progress') { onProgress && onProgress(e.data.p, e.data.label); return; }
-      w.removeEventListener('message', handler);
-      w.removeEventListener('error', onErr);
+      done();
       if (e.data.type === 'done') resolve(e.data);
       else reject(new Error(e.data.message || 'The file could not be read.'));
     };
     const onErr = (ev) => {
       ev.preventDefault();
-      w.removeEventListener('message', handler);
-      w.removeEventListener('error', onErr);
+      done();
       delete workers[name];
       reject(new Error('The background worker stopped. The file may be too large for this browser.'));
     };
     w.addEventListener('message', handler);
     w.addEventListener('error', onErr);
+    if (cancellable) tracked.set(job, { name, fail: (err) => { done(); reject(err); } });
     w.postMessage({ ...msg, job });
   });
+}
+
+/**
+ * Stop every cancellable job. Their workers are terminated and their
+ * promises reject with an error whose `cancelled` property is true.
+ * @returns {boolean} whether anything was running
+ */
+export function cancelLoad() {
+  if (!tracked.size) return false;
+  const jobs = [...tracked.values()];
+  for (const name of new Set(jobs.map((j) => j.name))) {
+    if (workers[name]) { workers[name].terminate(); delete workers[name]; }
+  }
+  for (const j of jobs) {
+    const err = new Error('Loading cancelled.');
+    err.cancelled = true;
+    j.fail(err);
+  }
+  return true;
 }
 
 const synthCache = new Map();
@@ -49,11 +75,12 @@ const synthCache = new Map();
  * @param {string} id
  * @param {number} [seed]
  * @param {(p:number)=>void} [onProgress]
+ * @param {boolean} [cancellable]
  */
-export async function syntheticVolume(id, seed = 1, onProgress) {
+export async function syntheticVolume(id, seed = 1, onProgress, cancellable = false) {
   const key = `${id}:${seed}`;
   if (!synthCache.has(key)) {
-    const p = runJob('synthetic-worker', { id, seed, size: 128 }, onProgress).then((r) => r.volume);
+    const p = runJob('synthetic-worker', { id, seed, size: 128 }, onProgress, cancellable).then((r) => r.volume);
     synthCache.set(key, p);
     p.catch(() => synthCache.delete(key));
   }
@@ -64,7 +91,7 @@ export async function syntheticVolume(id, seed = 1, onProgress) {
  * Load dropped or picked files into a source description.
  * @param {File[]} files
  * @param {(p:number, label?:string)=>void} onProgress
- * @returns {Promise<{kind:'mesh'|'volume'|'image'|'session', name:string, ...}>}
+ * @returns {Promise<{kind:'mesh'|'volume'|'image'|'session', name:string, warning?:string, ...}>}
  */
 export async function loadFiles(files, onProgress) {
   const list = [...files];
@@ -76,15 +103,18 @@ export async function loadFiles(files, onProgress) {
   const c = classifyFiles(list);
   const name = c.kind === 'sequence' ? `${c.files[0].name} (+${c.files.length - 1})` : c.files[0].name;
   if (c.kind === 'mesh') {
-    const r = await runJob('volume-worker', { kind: 'mesh', format: c.format, files: c.files }, onProgress);
-    return { kind: 'mesh', name, mesh: r.result.mesh };
+    const r = await runJob('volume-worker', { kind: 'mesh', format: c.format, files: c.files }, onProgress, true);
+    return { kind: 'mesh', name, mesh: r.result.mesh, warning: r.result.warning || null };
   }
-  if (c.kind === 'image') {
+  if (c.kind === 'image' && typeof OffscreenCanvas === 'undefined') {
+    // No canvas in workers: decode on the main thread.
     onProgress(0.2, 'Decoding image');
     const g = await decodeImageGrey(c.files[0], 4096);
-    return { kind: 'image', name, image: imageFromPlane(g.data, g.width, g.height, 1024) };
+    const image = imageFromPlane(g.data, g.width, g.height, 1024);
+    Object.assign(image, { sourceW: g.sourceWidth, sourceH: g.sourceHeight, factor: g.sourceWidth / image.w });
+    return { kind: 'image', name, image, spacing: null };
   }
-  const r = await runJob('volume-worker', { kind: c.kind, files: c.files }, onProgress);
+  const r = await runJob('volume-worker', { kind: c.kind, files: c.files }, onProgress, true);
   if (r.result.type === 'image') return { kind: 'image', name, image: r.result.image, spacing: r.result.spacing || null };
   return { kind: 'volume', name, volume: r.result.volume, count: c.files.length };
 }

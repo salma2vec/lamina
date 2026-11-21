@@ -59,11 +59,11 @@
         <span class="drop-formats">STL, PLY, OBJ &middot; NRRD &middot; TIFF stack &middot; image slices &middot; single image</span>
       </label>
       <div class="status" id="status" hidden>
-        <span id="status-text"></span>
+        <div class="status-row"><span id="status-text"></span><button id="cancel-load" class="small" title="Stop loading (Esc)">Cancel</button></div>
         <div class="progress"><div id="progress-bar"></div></div>
       </div>
       <p class="error" id="error" role="alert" hidden></p>
-      <p class="note" id="session-note" hidden></p>
+      <p class="note" id="source-note" role="status" hidden></p>
       <dl class="facts" id="source-facts"></dl>
       <div class="field" id="scale-field" hidden>
         <label for="scale-input" id="scale-label">Voxel size</label>
