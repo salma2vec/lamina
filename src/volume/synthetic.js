@@ -26,7 +26,7 @@ export const SPECIMENS = [
     name: 'Stromatolite',
     description: 'Microbial mat growth. Stacked domed laminae in branching columns, with sediment between.',
     plane: { axis: 'xz', offset: 0, tiltA: 0, tiltB: 0 },
-    crop: { zoom: 1.25, rotation: 0, ox: 0, oy: -6 },
+    crop: { zoom: 1.6, rotation: 0, ox: -5, oy: -12 },
     levels: 3,
   },
   {
@@ -308,7 +308,7 @@ const GENERATORS = {
         let col = z < base ? 1 : 0;
         for (const c of act) {
           const d = hyp(x - c.x, y - c.y) / c.r;
-          if (d < 1.4) col = Math.max(col, 1 - smooth(0.8, 1.15, d));
+          if (d < 1.1) col = Math.max(col, 1 - smooth(0.9, 1.02, d));
         }
         // Laminae follow a dome height field over the columns.
         let dome = 0;
@@ -317,11 +317,11 @@ const GENERATORS = {
           if (d2 < 4) dome = Math.max(dome, Math.exp(-d2 * 1.3) * c.r * 0.9);
         }
         const m = col;
-        const sediment = m < 1 ? 0.3 + 0.1 * fbm(x * 8, y * 8, z * 8) : 0;
+        const sediment = m < 1 ? 0.2 + 0.07 * fbm(x * 8, y * 8, z * 8) : 0;
         if (m <= 0) return sediment;
         const T = z - dome + 0.03 * fbm(x * 3, y * 3, z * 1.5);
-        const lam = Math.sin((T / 0.07) * 2 * Math.PI) + 0.45 * Math.sin((T / 0.033) * 2 * Math.PI + 1.7);
-        const laminae = 0.56 + 0.22 * Math.tanh(lam * 1.6) + 0.04 * fine(x * 10, y * 10, z * 16);
+        const lam = Math.sin((T / 0.14) * 2 * Math.PI) + 0.35 * Math.sin((T / 0.065) * 2 * Math.PI + 1.7);
+        const laminae = 0.64 + 0.22 * Math.tanh(lam * 2) + 0.03 * fine(x * 10, y * 10, z * 16);
         return sediment * (1 - m) + laminae * m;
       },
     };
