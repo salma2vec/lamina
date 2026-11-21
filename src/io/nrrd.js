@@ -41,14 +41,34 @@ function vecLen(s) {
   return Math.hypot(...m[1].split(',').map(Number));
 }
 
+/** Millimetres per unit for the length units found in NRRD "space units". */
+const UNIT_MM = { mm: 1, millimeter: 1, millimeters: 1, millimetre: 1, millimetres: 1, um: 1e-3, 'µm': 1e-3, 'μm': 1e-3, micron: 1e-3, microns: 1e-3, micrometer: 1e-3, micrometers: 1e-3, micrometre: 1e-3, micrometres: 1e-3, nm: 1e-6, cm: 10, m: 1000, meter: 1000, meters: 1000, metre: 1000, metres: 1000 };
+
+/**
+ * Scale factor from NRRD "space units" to millimetres. Missing or unknown
+ * units count as millimetres, the usual unit for CT data.
+ * @param {string|undefined} field e.g. '"microns" "microns" "microns"'
+ * @returns {number}
+ */
+export function spaceUnitScale(field) {
+  if (!field) return 1;
+  const units = (field.match(/"([^"]*)"/g) || []).map((u) => u.slice(1, -1).trim().toLowerCase()).filter(Boolean);
+  const k = units.map((u) => UNIT_MM[u]).find((x) => x !== undefined);
+  return k === undefined ? 1 : k;
+}
+
 /**
  * Decompress gzip data with the native DecompressionStream.
  * @param {Uint8Array} bytes
  */
 export async function gunzip(bytes) {
   if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot decompress gzip data.');
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  try {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  } catch {
+    throw new Error('The gzip data in this file is damaged or incomplete. The file may be truncated.');
+  }
 }
 
 /**
@@ -89,14 +109,21 @@ export async function parseNRRD(buf) {
     for (let i = 0; i < copy.length; i += bpe) copy.subarray(i, i + bpe).reverse();
   }
   const data = new Ctor(copy.buffer, 0, count);
+  // Voxel size per axis. A 2D image gets its in-plane size repeated as the third value.
+  const axes = dim - axisOffset;
   let spacing = null;
   if (fields['space directions']) {
     const parts = fields['space directions'].match(/\([^)]*\)|none/g) || [];
     const lens = parts.filter((p) => p !== 'none').map(vecLen);
-    if (lens.length >= 3 && lens.every((l) => l > 0)) spacing = lens.slice(0, 3);
+    if (lens.length >= axes && lens.slice(0, axes).every((l) => l > 0)) spacing = lens.slice(0, axes);
   } else if (fields.spacings) {
     const s = fields.spacings.split(/\s+/).map(Number).slice(axisOffset);
-    if (s.length >= 3 && s.slice(0, 3).every((x) => x > 0)) spacing = s.slice(0, 3);
+    if (s.length >= axes && s.slice(0, axes).every((x) => x > 0)) spacing = s.slice(0, axes);
+  }
+  if (spacing) {
+    const k = spaceUnitScale(fields['space units'] || fields.units);
+    spacing = spacing.map((x) => x * k);
+    if (spacing.length === 2) spacing.push(spacing[0]);
   }
   return { dims: sizes, spacing, data, type };
 }

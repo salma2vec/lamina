@@ -4,7 +4,7 @@ import { gzipSync } from 'node:zlib';
 import { parseSTL } from '../src/io/stl.js';
 import { parsePLY } from '../src/io/ply.js';
 import { parseOBJ } from '../src/io/obj.js';
-import { parseNRRD } from '../src/io/nrrd.js';
+import { parseNRRD, spaceUnitScale } from '../src/io/nrrd.js';
 import { classifyFiles } from '../src/io/detect.js';
 import { cubeSoup, toBinarySTL, toAsciiSTL } from './helpers.js';
 
@@ -100,6 +100,30 @@ test('NRRD spacings field and big-endian', async () => {
   const v = await parseNRRD(buf.buffer);
   assert.deepEqual([...v.data], [1, 256, 513, 4]);
   assert.deepEqual(v.spacing, [0.1, 0.1, 0.3]);
+});
+
+test('NRRD space units convert to millimetres', async () => {
+  const { buf } = nrrdBytes('uint8', Uint8Array, 'raw', 'space directions: (0,-40,0) (40,0,0) (0,0,120)\nspace units: "microns" "microns" "microns"\n');
+  const v = await parseNRRD(buf);
+  v.spacing.forEach((x, i) => close(x, [0.04, 0.04, 0.12][i], 1e-12));
+  const mm = await parseNRRD(nrrdBytes('uint8', Uint8Array, 'raw', 'spacings: 0.5 0.5 1\nunits: "mm" "mm" "mm"\n').buf);
+  assert.deepEqual(mm.spacing, [0.5, 0.5, 1]);
+  assert.equal(spaceUnitScale('"cm" "cm" "cm"'), 10);
+  assert.equal(spaceUnitScale(undefined), 1);
+});
+
+test('2D NRRD keeps its pixel size', async () => {
+  const head = new TextEncoder().encode('NRRD0004\ntype: uint8\ndimension: 2\nsizes: 3 2\nspace directions: (0.25,0) (0,0.25)\nencoding: raw\n\n');
+  const buf = new Uint8Array(head.length + 6);
+  buf.set(head);
+  const v = await parseNRRD(buf.buffer);
+  assert.deepEqual(v.dims, [3, 2, 1]);
+  assert.deepEqual(v.spacing, [0.25, 0.25, 0.25]);
+});
+
+test('damaged gzip NRRD gives a plain error', async () => {
+  const { buf } = nrrdBytes('uint16', Uint16Array, 'gzip');
+  await assert.rejects(parseNRRD(buf.slice(0, buf.byteLength - 20)), /damaged or incomplete/);
 });
 
 test('NRRD rejects detached data and bad types', async () => {
