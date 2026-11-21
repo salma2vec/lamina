@@ -5,11 +5,6 @@
  * Voxel (i,j,k) has its centre at ((i-(nx-1)/2)*sx, (j-(ny-1)/2)*sy, (k-(nz-1)/2)*sz).
  */
 
-/** Physical size of a volume along each axis. */
-export function volumeSize(vol) {
-  return vol.dims.map((d, i) => d * vol.spacing[i]);
-}
-
 /**
  * Streaming box-filter downsampler. Feed z-slices in order; each axis is
  * reduced by an integer factor so that no side exceeds maxSide.
