@@ -4,7 +4,7 @@
  * Messages out: { job, type: 'progress', p, label } | { job, type: 'done', result } | { job, type: 'error', message }
  */
 import { parseNRRD } from '../src/io/nrrd.js';
-import { tiffPages, decodeTiffPage } from '../src/io/tiff.js';
+import { tiffPages, decodeTiffPage, tiffMeta } from '../src/io/tiff.js';
 import { decodeImageGrey } from '../src/io/images.js';
 import { ext } from '../src/io/detect.js';
 import { VolumeBuilder, buildVolume, imageFromPlane } from '../src/volume/volume.js';
@@ -59,30 +59,50 @@ async function loadNRRD(file, progress) {
   return { type: 'volume', volume, sourceType: v.type };
 }
 
+/** Decode a TIFF page, naming the page in any error. */
+function tiffPage(buf, pages, z) {
+  try {
+    return decodeTiffPage(buf, pages[z]);
+  } catch (err) {
+    throw new Error(`TIFF page ${z + 1} of ${pages.length}: ${err.message}`);
+  }
+}
+
 async function loadTIFF(file, progress) {
   progress(0, 'Reading TIFF');
   const buf = await file.arrayBuffer();
   const pages = tiffPages(buf);
-  const first = decodeTiffPage(buf, pages[0]);
-  if (pages.length === 1) return { type: 'image', image: imageFromPlane(first.data, first.width, first.height) };
+  const meta = tiffMeta(pages[0]);
+  if (meta.pages && pages.length < meta.pages) {
+    throw new Error(`The TIFF file lists ${meta.pages} pages, but only ${pages.length} could be read. The file may be truncated.`);
+  }
+  const first = tiffPage(buf, pages, 0);
+  const px = meta.pixelSize;
+  if (pages.length === 1) {
+    const image = imageFromPlane(first.data, first.width, first.height);
+    return { type: 'image', image, spacing: px };
+  }
   const b = new VolumeBuilder(first.width, first.height, pages.length, MAX);
   b.addSlice(0, first.data);
   for (let z = 1; z < pages.length; z++) {
-    const pg = decodeTiffPage(buf, pages[z]);
+    const pg = tiffPage(buf, pages, z);
     if (pg.width !== first.width || pg.height !== first.height) throw new Error(`TIFF page ${z + 1} has a different size from page 1.`);
     b.addSlice(z, pg.data);
     pages[z].data = null;
     if ((z & 3) === 0) progress(z / pages.length, `Page ${z + 1} of ${pages.length}`);
   }
-  return { type: 'volume', volume: b.finish(null) };
+  // Without a slice spacing, the slices are taken to be as far apart as the pixels.
+  return { type: 'volume', volume: b.finish(px ? [px, px, meta.zSpacing || px] : null) };
 }
 
 async function decodeAny(file) {
   const e = ext(file.name);
   if (e === 'tif' || e === 'tiff') {
     const buf = await file.arrayBuffer();
-    const pg = decodeTiffPage(buf, tiffPages(buf)[0]);
-    return { width: pg.width, height: pg.height, data: pg.data };
+    const pages = tiffPages(buf);
+    let pg;
+    try { pg = decodeTiffPage(buf, pages[0]); } catch (err) { throw new Error(`"${file.name}": ${err.message}`); }
+    return { width: pg.width, height: pg.height, data: pg.data, pixelSize: tiffMeta(pages[0]).pixelSize };
   }
   if (typeof OffscreenCanvas === 'undefined') throw new Error('This browser cannot decode image slices in the background. Use a TIFF stack or NRRD.');
   return decodeImageGrey(file);
@@ -98,5 +118,6 @@ async function loadSequence(files, progress) {
     b.addSlice(z, s.data);
     if ((z & 3) === 0) progress(z / files.length, `Slice ${z + 1} of ${files.length}`);
   }
-  return { type: 'volume', volume: b.finish(null) };
+  const px = first.pixelSize;
+  return { type: 'volume', volume: b.finish(px ? [px, px, px] : null) };
 }

@@ -16,6 +16,54 @@ export function tiffPages(buf) {
   return ifds;
 }
 
+/** Millimetres per unit for the units ImageJ writes in its description. */
+const UNIT_MM = { mm: 1, millimeter: 1, millimetre: 1, micron: 1e-3, microns: 1e-3, um: 1e-3, 'µm': 1e-3, 'μm': 1e-3, '\\u00b5m': 1e-3, nm: 1e-6, nanometer: 1e-6, cm: 10, m: 1000, meter: 1000, metre: 1000, inch: 25.4, in: 25.4 };
+
+/** Resolutions that image editors write by default. They say nothing about the specimen. */
+const DEFAULT_DPI = [72, 96, 150, 300];
+
+/**
+ * Pixel size, slice spacing and page count from TIFF metadata.
+ * Reads the ImageJ description (unit, spacing, images) and the resolution tags.
+ * @param {Object} ifd first page from tiffPages
+ * @returns {{pixelSize:number|null, zSpacing:number|null, pages:number|null}} sizes in mm
+ */
+export function tiffMeta(ifd) {
+  const desc = ifd.t270 && typeof ifd.t270[0] === 'string' ? ifd.t270[0] : '';
+  const ij = {};
+  if (desc.startsWith('ImageJ=')) {
+    for (const line of desc.split(/\r?\n/)) {
+      const i = line.indexOf('=');
+      if (i > 0) ij[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+    }
+  }
+  const unitMm = ij.unit ? UNIT_MM[ij.unit.toLowerCase()] : undefined;
+  const xres = ifd.t282 ? ifd.t282[0] : 0;
+  // TIFF resolution unit: 1 none, 2 inch (the default), 3 centimetre.
+  const resUnit = ifd.t296 ? ifd.t296[0] : 2;
+  let pixelSize = null;
+  if (xres > 0 && Number.isFinite(xres)) {
+    if (unitMm) pixelSize = unitMm / xres;
+    else if (resUnit === 3) pixelSize = 10 / xres;
+    else if (resUnit === 2 && ifd.t282 && !DEFAULT_DPI.includes(Math.round(xres * 1000) / 1000)) pixelSize = 25.4 / xres;
+  }
+  const z = unitMm && +ij.spacing > 0 ? +ij.spacing * unitMm : null;
+  const pages = +ij.images > 0 ? Math.round(+ij.images) : null;
+  return { pixelSize, zSpacing: z, pages };
+}
+
+/**
+ * Check that a page's image data lies inside the file.
+ * @param {ArrayBuffer} buf
+ * @param {Object} ifd
+ */
+export function tiffPageComplete(buf, ifd) {
+  const offs = ifd.t273 || ifd.t324, counts = ifd.t279 || ifd.t325;
+  if (!offs || !counts) return true;
+  for (let i = 0; i < offs.length; i++) if (offs[i] + (counts[i] || 0) > buf.byteLength) return false;
+  return true;
+}
+
 /**
  * Decode one TIFF page to a greyscale Float32 plane (raw sample values).
  * Colour pages use the mean of R, G and B.
@@ -24,6 +72,7 @@ export function tiffPages(buf) {
  * @returns {{width:number, height:number, data:Float32Array}}
  */
 export function decodeTiffPage(buf, ifd) {
+  if (!tiffPageComplete(buf, ifd)) throw new Error('A TIFF page ends past the end of the file. The file may be truncated.');
   UTIF.decodeImage(buf, ifd);
   const w = ifd.width, h = ifd.height;
   const bps = ifd.t258 ? ifd.t258[0] : 1;

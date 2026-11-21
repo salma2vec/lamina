@@ -51,13 +51,17 @@ export function toAsciiSTL(soup) {
  * @param {number} h
  * @param {8|16} bits
  * @param {boolean} [littleEndian]
+ * @param {{description?:string, xres?:number, resUnit?:number}} [meta] tags written on every page
  */
-export function writeTIFF(pages, w, h, bits = 16, littleEndian = true) {
+export function writeTIFF(pages, w, h, bits = 16, littleEndian = true, meta = {}) {
   const bpp = bits / 8;
-  const entries = 9;
+  const desc = meta.description ? new TextEncoder().encode(meta.description + '\0') : null;
+  const entries = 9 + (desc ? 1 : 0) + (meta.xres ? 3 : 0);
   const ifdSize = 2 + entries * 12 + 4;
+  // Out-of-line values: description text, then two rationals.
+  const extraSize = (desc ? desc.length + (desc.length & 1) : 0) + (meta.xres ? 16 : 0);
   const dataSize = w * h * bpp;
-  const total = 8 + pages.length * (ifdSize + dataSize);
+  const total = 8 + pages.length * (ifdSize + extraSize + dataSize);
   const buf = new ArrayBuffer(total);
   const dv = new DataView(buf);
   const le = littleEndian;
@@ -66,13 +70,21 @@ export function writeTIFF(pages, w, h, bits = 16, littleEndian = true) {
   dv.setUint32(4, 8, le);
   let o = 8;
   pages.forEach((plane, p) => {
-    const ifd = o, data = o + ifdSize;
+    const ifd = o, extra = o + ifdSize, data = extra + extraSize;
     const next = p < pages.length - 1 ? data + dataSize : 0;
     dv.setUint16(ifd, entries, le);
-    const tags = [[256, 3, w], [257, 3, h], [258, 3, bits], [259, 3, 1], [262, 3, 1], [273, 4, data], [277, 3, 1], [278, 3, h], [279, 4, dataSize]];
-    tags.forEach(([tag, type, val], i) => {
+    const tags = [[256, 3, w], [257, 3, h], [258, 3, bits], [259, 3, 1], [262, 3, 1]];
+    let x = extra;
+    if (desc) { new Uint8Array(buf, x, desc.length).set(desc); tags.push([270, 2, x, desc.length]); x += desc.length + (desc.length & 1); }
+    tags.push([273, 4, data], [277, 3, 1], [278, 3, h], [279, 4, dataSize]);
+    if (meta.xres) {
+      const den = 1e6;
+      for (const k of [0, 8]) { dv.setUint32(x + k, Math.round(meta.xres * den), le); dv.setUint32(x + k + 4, den, le); }
+      tags.push([282, 5, x], [283, 5, x + 8], [296, 3, meta.resUnit || 2]);
+    }
+    tags.forEach(([tag, type, val, count = 1], i) => {
       const e = ifd + 2 + i * 12;
-      dv.setUint16(e, tag, le); dv.setUint16(e + 2, type, le); dv.setUint32(e + 4, 1, le);
+      dv.setUint16(e, tag, le); dv.setUint16(e + 2, type, le); dv.setUint32(e + 4, count, le);
       if (type === 3) dv.setUint16(e + 8, val, le); else dv.setUint32(e + 8, val, le);
     });
     dv.setUint32(ifd + 2 + entries * 12, next, le);
