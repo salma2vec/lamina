@@ -21,6 +21,7 @@ const f2 = (v) => (Math.round(v * 100) / 100).toString();
  * @param {Object} [p.sheet] computeSheet result, for the key
  * @param {string} [p.title]
  * @param {boolean} [p.standalone] include XML prolog
+ * @param {boolean} [p.key] draw the clay key (default true)
  * @returns {{svg:string, width:number, height:number}}
  */
 export function caneSVG(p) {
@@ -77,7 +78,7 @@ export function caneSVG(p) {
   parts.push(`<text x="${f2(m + bar + 2)}" y="${f2(y + 1.2)}" font-family="Menlo, monospace" font-size="2.8" fill="${ink}">${bar} mm</text></g>`);
   // Key.
   y += 7;
-  const clays = p.sheet ? p.sheet.clays : [];
+  const clays = p.sheet && p.key !== false ? p.sheet.clays : [];
   clays.forEach((c) => {
     parts.push(`<rect x="${f2(m)}" y="${f2(y)}" width="6" height="6" fill="${c.colour}" stroke="${ink}" stroke-width="0.15"/>`);
     parts.push(`<text x="${f2(m + 9)}" y="${f2(y + 4.2)}" font-family="Helvetica, Arial, sans-serif" font-size="3" fill="${ink}">${esc(c.name)}</text>`);
