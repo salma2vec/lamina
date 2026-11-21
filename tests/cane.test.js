@@ -156,5 +156,7 @@ test('tile layouts', () => {
   const r = layoutTiles({ layout: 'radial', width: 100, height: 100, tileW: 10, tileH: 10 });
   assert.ok(r.tiles.length > 20);
   const b = stretchedBox(10, 10, 2, 0);
+  const c = stretchedBox(10, 10, 2, 45, [[0.5, 0], [0, 0.5], [-0.5, 0], [0, -0.5]]);
+  assert.ok(c.w < stretchedBox(10, 10, 2, 45).w);
   assert.ok(Math.abs(b.w - 20) < 1e-9 && Math.abs(b.h - 5) < 1e-9);
 });

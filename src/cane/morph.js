@@ -99,8 +99,9 @@ export function components(labels, w, h) {
 }
 
 /**
- * Merge every component marked in `drop` into its most common neighbouring
- * level. Large neighbours win over other dropped components.
+ * Merge components marked in `drop` into their most common neighbouring
+ * level, counting only neighbours that are kept. Components that touch only
+ * other dropped components wait for a later pass.
  */
 function mergeComponents(labels, w, h, comp, sizes, drop) {
   const out = labels.slice();
@@ -112,11 +113,11 @@ function mergeComponents(labels, w, h, comp, sizes, drop) {
     const nb = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w];
     for (const j of nb) {
       if (j < 0 || j >= w * h) continue;
-      const l = labels[j];
-      if (l === OUTSIDE || comp[j] === c) continue;
+      const cj = comp[j];
+      if (cj < 0 || cj === c || drop[cj]) continue;
       let v = votes.get(c);
       if (!v) votes.set(c, (v = new Map()));
-      v.set(l, (v.get(l) || 0) + (drop[comp[j]] ? 0.01 : 1));
+      v.set(labels[j], (v.get(labels[j]) || 0) + 1);
     }
   }
   const target = new Int16Array(sizes.length).fill(-1);
@@ -134,6 +135,30 @@ function mergeComponents(labels, w, h, comp, sizes, drop) {
 }
 
 /**
+ * Repeatedly merge components chosen by `pick` until none remain.
+ * When every candidate touches only other candidates, the largest one by
+ * `score` is kept so that the others can merge into it.
+ * @param {(lab:Uint8Array) => {comp:Int32Array, sizes:number[], drop:Uint8Array, score:ArrayLike<number>}} pick
+ */
+function mergeUntilStable(labels, w, h, pick) {
+  let out = labels.slice();
+  for (let pass = 0; pass < 32; pass++) {
+    const { comp, sizes, drop, score } = pick(out);
+    if (!drop.some((d) => d)) break;
+    let r = mergeComponents(out, w, h, comp, sizes, drop);
+    if (!r.changed) {
+      let best = -1;
+      for (let c = 0; c < sizes.length; c++) if (drop[c] && (best < 0 || score[c] > score[best])) best = c;
+      drop[best] = 0;
+      r = mergeComponents(out, w, h, comp, sizes, drop);
+      if (!r.changed) break;
+    }
+    out = r.out;
+  }
+  return out;
+}
+
+/**
  * Merge regions smaller than minArea pixels into their most common
  * neighbouring level. Removes specks and fills pinholes alike.
  * @param {Uint8Array} labels
@@ -143,19 +168,11 @@ function mergeComponents(labels, w, h, comp, sizes, drop) {
  * @returns {Uint8Array}
  */
 export function removeSmallRegions(labels, w, h, minArea) {
-  let out = labels.slice();
-  if (minArea <= 1) return out;
-  for (let pass = 0; pass < 3; pass++) {
-    const { comp, sizes } = components(out, w, h);
-    const drop = new Uint8Array(sizes.length);
-    let any = false;
-    sizes.forEach((s, id) => { if (s < minArea) { drop[id] = 1; any = true; } });
-    if (!any) break;
-    const r = mergeComponents(out, w, h, comp, sizes, drop);
-    out = r.out;
-    if (!r.changed) break;
-  }
-  return out;
+  if (minArea <= 1) return labels.slice();
+  return mergeUntilStable(labels, w, h, (lab) => {
+    const { comp, sizes } = components(lab, w, h);
+    return { comp, sizes, drop: Uint8Array.from(sizes, (s) => (s < minArea ? 1 : 0)), score: sizes };
+  });
 }
 
 /**
@@ -191,19 +208,11 @@ export function regionWidths(labels, w, h) {
  * @param {number} minWidth
  */
 export function removeThinRegions(labels, w, h, minWidth) {
-  let out = labels.slice();
-  if (minWidth <= 1) return out;
-  for (let pass = 0; pass < 3; pass++) {
-    const { comp, sizes, width } = regionWidths(out, w, h);
-    const drop = new Uint8Array(sizes.length);
-    let any = false;
-    width.forEach((wd, id) => { if (wd < minWidth) { drop[id] = 1; any = true; } });
-    if (!any) break;
-    const r = mergeComponents(out, w, h, comp, sizes, drop);
-    out = r.out;
-    if (!r.changed) break;
-  }
-  return out;
+  if (minWidth <= 1) return labels.slice();
+  return mergeUntilStable(labels, w, h, (lab) => {
+    const { comp, sizes, width } = regionWidths(lab, w, h);
+    return { comp, sizes, drop: Uint8Array.from(width, (x) => (x < minWidth ? 1 : 0)), score: width };
+  });
 }
 
 function blur1d(src, dst, w, h, k, horizontal) {
