@@ -63,6 +63,24 @@ test('volume builder downsamples by integer factors and normalises', () => {
   assert.deepEqual(b.dims, [4, 4, 4]);
 });
 
+test('image stacks keep their orientation in an XY section', () => {
+  // Each page is 8 x 6 with a bright pixel in its top-left corner (row 0, column 0).
+  const w = 8, h = 6, d = 4;
+  const page = new Float32Array(w * h).fill(10);
+  page[0] = 1000;
+  const b = new VolumeBuilder(w, h, d, 256);
+  for (let z = 0; z < d; z++) b.addSlice(z, page);
+  const v = b.finish([1, 1, 1]);
+  // The top image row is stored at the highest j, which is +y.
+  assert.ok(v.data[(h - 1) * w] > v.data[0]);
+  const s = sliceVolume(v, planeFrame({ axis: 'xy', offset: 0 }), { n: 6, px: 1 });
+  // Output row 0 is +v (top). The marker must appear top-left, as in the image.
+  let best = 0;
+  for (let i = 1; i < s.length; i++) if (s[i] > s[best]) best = i;
+  assert.equal(Math.floor(best / 6), 0);
+  assert.equal(best % 6, 0);
+});
+
 test('synthetic generation is deterministic', () => {
   for (const s of SPECIMENS) {
     const a = generate(s.id, 24, 5);

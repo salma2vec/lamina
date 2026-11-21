@@ -8,6 +8,8 @@
 /**
  * Streaming box-filter downsampler. Feed z-slices in order; each axis is
  * reduced by an integer factor so that no side exceeds maxSide.
+ * Slices arrive as images, top row first. The builder stores the top row at
+ * the highest j (+y), so an XY section reads the same way as the image.
  */
 export class VolumeBuilder {
   /**
@@ -39,7 +41,7 @@ export class VolumeBuilder {
     const row = this.row, rc = this.rowCnt;
     row.fill(0); rc.fill(0);
     for (let y = 0; y < ny; y++) {
-      const oyi = ((y / fy) | 0) * ox;
+      const oyi = (((ny - 1 - y) / fy) | 0) * ox;
       const base = y * nx;
       for (let x = 0; x < nx; x++) {
         const v = plane[base + x];
