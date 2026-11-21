@@ -76,37 +76,11 @@ export function parsePLY(buf) {
       }
     }
   } else if (format === 'binary_little_endian' || format === 'binary_big_endian') {
-    const le = format === 'binary_little_endian';
-    const dv = new DataView(buf);
-    let o = headerBytes;
-    for (const el of elements) {
-      const reads = el.props.map((pr) => ({
-        pr,
-        r: reader(dv, pr.type, le),
-        rc: pr.list ? reader(dv, pr.countType, le) : null,
-      }));
-      for (let r = 0; r < el.count; r++) {
-        let list = null;
-        for (let k = 0; k < reads.length; k++) {
-          const { pr, r: rd, rc } = reads[k];
-          if (o >= buf.byteLength) throw new Error('The binary PLY file ends early.');
-          if (pr.list) {
-            const c = rc(o);
-            o += SIZES[pr.countType];
-            const l = new Array(c);
-            for (let q = 0; q < c; q++) { l[q] = rd(o); o += SIZES[pr.type]; }
-            if (!list) list = l;
-          } else {
-            const val = rd(o);
-            o += SIZES[pr.type];
-            if (el === vEl) {
-              const a = ix.indexOf(k);
-              if (a >= 0) verts[r * 3 + a] = val;
-            }
-          }
-        }
-        if (el.name === 'face' && list) faces.push(list);
-      }
+    try {
+      readBinary(buf, headerBytes, elements, vEl, ix, verts, faces, format === 'binary_little_endian');
+    } catch (err) {
+      if (err instanceof RangeError) throw new Error('The binary PLY file ends early. It may be truncated.');
+      throw err;
     }
   } else {
     throw new Error(`Unsupported PLY format "${format}".`);
@@ -125,4 +99,39 @@ export function parsePLY(buf) {
     }
   }
   return out;
+}
+
+/** Read binary PLY elements into verts and faces. Throws RangeError when the data ends early. */
+function readBinary(buf, headerBytes, elements, vEl, ix, verts, faces, le) {
+  const dv = new DataView(buf);
+  let o = headerBytes;
+  for (const el of elements) {
+    const reads = el.props.map((pr) => ({
+      pr,
+      r: reader(dv, pr.type, le),
+      rc: pr.list ? reader(dv, pr.countType, le) : null,
+    }));
+    for (let r = 0; r < el.count; r++) {
+      let list = null;
+      for (let k = 0; k < reads.length; k++) {
+        const { pr, r: rd, rc } = reads[k];
+        if (o >= buf.byteLength) throw new RangeError('end of data');
+        if (pr.list) {
+          const c = rc(o);
+          o += SIZES[pr.countType];
+          const l = new Array(c);
+          for (let q = 0; q < c; q++) { l[q] = rd(o); o += SIZES[pr.type]; }
+          if (!list) list = l;
+        } else {
+          const val = rd(o);
+          o += SIZES[pr.type];
+          if (el === vEl) {
+            const a = ix.indexOf(k);
+            if (a >= 0) verts[r * 3 + a] = val;
+          }
+        }
+      }
+      if (el.name === 'face' && list) faces.push(list);
+    }
+  }
 }

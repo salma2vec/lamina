@@ -25,7 +25,30 @@ test('STL ASCII round trip', () => {
 });
 
 test('STL rejects garbage', () => {
-  assert.throws(() => parseSTL(new Uint8Array(120).fill(7).buffer), /STL/);
+  assert.throws(() => parseSTL(new Uint8Array(120).fill(7).buffer), /not a valid STL/);
+});
+
+test('truncated STL files', () => {
+  const bin = toBinarySTL(cubeSoup(2));
+  assert.throws(() => parseSTL(bin.slice(0, bin.byteLength - 70)), /lists 12 triangles, but the file holds only 10/);
+  // Extra bytes after the triangles are ignored.
+  const padded = new Uint8Array(bin.byteLength + 16);
+  padded.set(new Uint8Array(bin));
+  assert.equal(parseSTL(padded.buffer).length, 12 * 9);
+  // ASCII cut inside the last facet: complete triangles load, with a warning.
+  const ascii = new Uint8Array(toAsciiSTL(cubeSoup(2)));
+  const notes = [];
+  const out = parseSTL(ascii.slice(0, ascii.length - 120).buffer, (m) => notes.push(m));
+  assert.ok(out.length % 9 === 0 && out.length < 12 * 9 && out.length >= 9 * 9);
+  assert.match(notes[0], /truncated/);
+  const whole = [];
+  parseSTL(ascii.buffer, (m) => whole.push(m));
+  assert.equal(whole.length, 0);
+});
+
+test('truncated binary PLY gives a plain error', () => {
+  const buf = plyQuad('binary_little_endian');
+  assert.throws(() => parsePLY(buf.slice(0, buf.byteLength - 6)), /ends early/);
 });
 
 const plyQuad = (format) => {
