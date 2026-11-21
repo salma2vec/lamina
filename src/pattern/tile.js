@@ -22,13 +22,24 @@ export const ALTERNATIONS = [
  * @param {number} th tile height
  * @param {number} stretch elongation factor (area preserving)
  * @param {number} angle stretch axis in degrees
+ * @param {number[][]} [poly] tile outline in unit coordinates (width 1); gives a tighter box
  */
-export function stretchedBox(tw, th, stretch, angle) {
+export function stretchedBox(tw, th, stretch, angle, poly) {
   const a = (angle * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
   const sx = stretch, sy = 1 / stretch;
   // M = R(a) S R(-a)
   const m00 = c * c * sx + s * s * sy, m01 = c * s * (sx - sy), m11 = s * s * sx + c * c * sy;
-  return { w: Math.abs(m00) * tw + Math.abs(m01) * th, h: Math.abs(m01) * tw + Math.abs(m11) * th, m: [m00, m01, m01, m11] };
+  const m = [m00, m01, m01, m11];
+  if (poly && poly.length) {
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const [px, py] of poly) {
+      const x = px * tw, y = py * tw;
+      const X = m00 * x + m01 * y, Y = m01 * x + m11 * y;
+      if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y;
+    }
+    return { w: x1 - x0, h: y1 - y0, m };
+  }
+  return { w: Math.abs(m00) * tw + Math.abs(m01) * th, h: Math.abs(m01) * tw + Math.abs(m11) * th, m };
 }
 
 /**
@@ -47,10 +58,11 @@ export function stretchedBox(tw, th, stretch, angle) {
  * @param {string} [o.alternate]
  * @param {number} [o.jitter] 0..1
  * @param {number} [o.seed]
+ * @param {number[][]} [o.poly] tile outline in unit coordinates
  */
 export function layoutTiles(o) {
   const stretch = o.stretch || 1;
-  const box = stretchedBox(o.tileW, o.tileH, stretch, o.stretchAngle || 0);
+  const box = stretchedBox(o.tileW, o.tileH, stretch, o.stretchAngle || 0, o.poly);
   const gap = o.gap || 0;
   const cw = box.w * (1 + gap), ch = box.h * (1 + gap);
   const rnd = mulberry32(o.seed || 1);

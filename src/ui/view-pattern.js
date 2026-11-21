@@ -1,7 +1,7 @@
 /** Pattern view: tiles cane slices on a slab or a vessel silhouette. */
 import { fitCanvas, cssVar, fx } from './dom.js';
 import { layoutTiles, LAYOUTS } from '../pattern/tile.js';
-import { outlineHeight } from '../cane/outline.js';
+import { outlineHeight, outlinePolygon } from '../cane/outline.js';
 
 /**
  * Draw tiled cane slices into a context.
@@ -12,15 +12,16 @@ import { outlineHeight } from '../cane/outline.js';
  * @param {Object} pat pattern parameters
  * @param {number} hf outline height fraction
  * @param {string} ground colour under the tiles
+ * @param {number[][]} [poly] outline polygon in unit coordinates
  */
-export function drawTiles(ctx, cane, w, h, pat, hf, ground) {
+export function drawTiles(ctx, cane, w, h, pat, hf, ground, poly) {
   ctx.fillStyle = ground;
   ctx.fillRect(0, 0, w, h);
   const T = Math.max(12, pat.tile * Math.min(w, h));
   const { tiles } = layoutTiles({
     layout: pat.layout, width: w, height: h, tileW: T, tileH: T * hf,
     gap: pat.gap, stretch: pat.stretch, stretchAngle: pat.stretchAngle,
-    alternate: pat.alternate, jitter: pat.jitter ? 1 : 0, seed: 11,
+    alternate: pat.alternate, jitter: pat.jitter ? 1 : 0, seed: 11, poly,
   });
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -42,6 +43,12 @@ export class PatternView {
     this.app = app;
     this.flat = document.createElement('canvas');
     new ResizeObserver(() => this.visible && this.draw()).observe(canvas);
+  }
+
+  /** Current outline polygon (unit coordinates, y up). */
+  poly() {
+    const o = this.app.params.outline;
+    return outlinePolygon(o.shape, o.aspect);
   }
 
   /** Colour of the clay with the largest area: it fills gaps between slices. */
@@ -73,7 +80,7 @@ export class PatternView {
     ctx.rect(m, m + 6, sw, sh);
     ctx.clip();
     ctx.translate(m, m + 6);
-    drawTiles(ctx, app.caneCanvas, sw, sh, pat, hf, ground);
+    drawTiles(ctx, app.caneCanvas, sw, sh, pat, hf, ground, this.poly());
     ctx.restore();
     ctx.strokeStyle = rule;
     ctx.strokeRect(m - 0.5, m + 5.5, sw + 1, sh + 1);
@@ -92,7 +99,7 @@ export class PatternView {
       ctx.arc(cx, cy, R, 0, Math.PI * 2);
       ctx.clip();
       ctx.translate(cx - R, cy - R);
-      drawTiles(ctx, app.caneCanvas, 2 * R, 2 * R, pat, hf, ground);
+      drawTiles(ctx, app.caneCanvas, 2 * R, 2 * R, pat, hf, ground, this.poly());
       ctx.restore();
       // Rim and foot ring.
       ctx.strokeStyle = ink;
@@ -111,9 +118,9 @@ export class PatternView {
     // Flat pattern wide enough to wrap half the circumference at the widest point.
     const fw = Math.ceil(Wm * Math.PI * dpr), fh = Math.ceil(H * dpr);
     this.flat.width = fw; this.flat.height = fh;
-    const fctx = this.flat.getContext('2d');
+    const fctx = this.flat.getContext('2d', { willReadFrequently: true });
     fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawTiles(fctx, app.caneCanvas, fw / dpr, fh / dpr, pat, hf, ground);
+    drawTiles(fctx, app.caneCanvas, fw / dpr, fh / dpr, pat, hf, ground, this.poly());
     const src = fctx.getImageData(0, 0, fw, fh).data;
     const ow = Math.ceil(2 * Wm * dpr), oh = fh;
     const out = new ImageData(ow, oh);
