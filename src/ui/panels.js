@@ -95,6 +95,9 @@ export function renderSheet(root, app) {
   }));
   body.append(el('tr', { class: 'total' }, [el('th', { text: `Total, with ${fx(p.waste, 0)}% waste` }), el('td', { text: '' }), el('td', { text: fx(s.totalMass, 0) })]));
   root.append(el('table', { class: 'clays' }, [head, body]));
+  if (s.clays.length === 1 && app.params.levels > 1) {
+    root.append(el('p', { class: 'warn', text: `Only one clay is left after clean-up: the structure in this section is finer than the ${fx(app.params.clean.minFeature, 1)} mm minimum feature. Zoom in on the section, or lower the minimum feature.` }));
+  }
   if (s.ratio <= 1) {
     root.append(el('p', { class: 'warn', text: `"Reduce to" is ${fx(p.target, 1)} mm, which is not smaller than the ${fx(p.size, 1)} mm cane. Set a smaller reduced size.` }));
   }

@@ -92,7 +92,8 @@ export class CaneView {
     scaleBar(ctx, 14, h - 16, pxPerMm, 'mm', ink, ' at build');
     // Thinnest region marker.
     const sm = d.smallest, sh = d.sheet;
-    if (sm && sh) {
+    // With a single region there is no thinnest region to point at.
+    if (sm && sh && sh.clays.length > 1) {
       const g = app.G;
       const X = cx - size / 2 + ((sm.x + 0.5) / g) * size, Y = cy - size / 2 + ((sm.y + 0.5) / g) * size;
       const r = Math.max(6, (sm.width / 2 / g) * size + 4);
