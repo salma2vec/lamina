@@ -48,6 +48,8 @@ export function bindControls(app, root = document) {
       app.changed(key);
       syncOutputs();
     });
+    // A number left out of range shows the value in use again when the field loses focus.
+    if (input.type === 'number') input.addEventListener('change', () => { input.value = getPath(app.params, key); });
   }
   const syncOutputs = () => {
     for (const o of $$('output[data-out]', root)) {

@@ -85,9 +85,9 @@ export function renderSheet(root, app) {
     row('Thinnest region, build', `${fx(s.smallestBuild, 2)} mm`),
     row('Thinnest region, reduced', `${fx(s.smallestReduced, 2)} mm`),
     row('Thinnest region, fired', `${fx(s.smallestFired, 2)} mm`),
-    row('Fired size', `${fx(s.firedMin, 2)}–${fx(s.firedMax, 2)} mm`),
+    row('Fired size', `${firedRange(s)} mm`),
   ]));
-  const head = el('thead', {}, [el('tr', {}, [el('th', { text: 'Clay' }), el('td', { text: 'area' }), el('td', { text: 'wet g' })])]);
+  const head = el('thead', {}, [el('tr', {}, [el('th', { text: 'Clay' }), el('td', { text: 'Area' }), el('td', { text: 'Wet g' })])]);
   const body = el('tbody', {}, s.clays.map((c) => {
     const sw = el('span', { class: 'sw' });
     sw.style.background = c.colour;
@@ -95,14 +95,22 @@ export function renderSheet(root, app) {
   }));
   body.append(el('tr', { class: 'total' }, [el('th', { text: `Total, with ${fx(p.waste, 0)}% waste` }), el('td', { text: '' }), el('td', { text: fx(s.totalMass, 0) })]));
   root.append(el('table', { class: 'clays' }, [head, body]));
+  if (s.ratio <= 1) {
+    root.append(el('p', { class: 'warn', text: `"Reduce to" is ${fx(p.target, 1)} mm, which is not smaller than the ${fx(p.size, 1)} mm cane. Set a smaller reduced size.` }));
+  }
   if (s.featureWarn) {
-    root.append(el('p', { class: 'warn', text: `The thinnest region is ${fx(s.smallestReduced, 2)} mm after reduction. This is below ${fx(p.minReduced, 1)} mm. Increase the minimum feature or reduce less.` }));
+    root.append(el('p', { class: 'warn', text: `The thinnest region is ${fx(s.smallestReduced, 2)} mm after reduction. This is below ${fx(p.minReduced, 1)} mm. Set the minimum feature to at least ${fx(Math.ceil(s.minBuildFeature * 10) / 10, 1)} mm, or reduce less.` }));
   }
   if (s.compat.warn) {
     const w = el('p', { class: 'warn' }, [`Shrinkage differs by ${fx(s.compat.spread, 1)} percentage points between these clays. The cane can crack in drying or firing. Test the combination first. `]);
     w.append(el('a', { href: 'docs/CERAMICS.md#3-clay-compatibility', target: '_blank', rel: 'noopener', text: 'Clay compatibility' }), '.');
     root.append(w);
   }
+}
+
+/** Fired size as one value, or a range when the clays shrink differently. */
+export function firedRange(s) {
+  return Math.abs(s.firedMax - s.firedMin) < 0.005 ? fx(s.firedMin, 2) : `${fx(s.firedMin, 2)}–${fx(s.firedMax, 2)}`;
 }
 
 /** Source facts list. */

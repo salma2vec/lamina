@@ -31,7 +31,7 @@ export function printSheetHTML(p) {
 <tr><th>Cane length at build</th><td class="num">${n(q.length)} mm</td><th>Length after reduction</th><td class="num">${n(s.reducedLength, 0)} mm</td></tr>
 <tr><th>Reduced size</th><td class="num">${n(q.target)} mm</td><th>Thinnest region, reduced</th><td class="num">${n(s.smallestReduced, 2)} mm</td></tr>
 <tr><th>Wet density</th><td class="num">${n(q.density, 2)} g/cm³</td><th>Thinnest region, fired</th><td class="num">${n(s.smallestFired, 2)} mm</td></tr>
-<tr><th>Minimum, reduced</th><td class="num">${n(q.minFeature, 1)} mm</td><th>Fired size</th><td class="num">${n(s.firedMin, 2)}–${n(s.firedMax, 2)} mm</td></tr>
+<tr><th>Minimum, reduced</th><td class="num">${n(q.minFeature, 1)} mm</td><th>Fired size</th><td class="num">${Math.abs(s.firedMax - s.firedMin) < 0.005 ? n(s.firedMin, 2) : `${n(s.firedMin, 2)}–${n(s.firedMax, 2)}`} mm</td></tr>
 <tr><th>Waste allowance</th><td class="num">${n(q.waste, 0)} %</td><th>Total wet clay</th><td class="num">${n(s.totalMass, 0)} g</td></tr>
 </table>
 <table class="ps-clays"><thead><tr><th>Clay</th><th class="num">Area %</th><th class="num">Area mm²</th><th class="num">Volume cm³</th><th class="num">Wet g</th><th class="num">Shrink %</th><th class="num">Fired mm</th></tr></thead><tbody>${rows}</tbody></table>
