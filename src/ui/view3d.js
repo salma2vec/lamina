@@ -102,6 +102,11 @@ export class View3D {
 
   /** Rebuild source geometry and frame the camera. */
   setSource(s) {
+    const cap = document.getElementById('cap-3d');
+    if (cap) {
+      const what = !s ? '' : s.kind === 'mesh' ? 'mesh' : s.kind === 'volume' ? 'volume, centre slices' : 'image';
+      cap.innerHTML = s ? `<b>3D</b>${what}${this.ok ? ' &middot; drag to turn, scroll to zoom' : ''}` : '';
+    }
     if (!this.ok) return;
     this.clear(this.srcGroup);
     this.userMoved = false;
