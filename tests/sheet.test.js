@@ -76,17 +76,38 @@ test('SVG export is in millimetres at 1:1', () => {
   const d = svg.match(/id="cane-outline" d="([^"]+)"/)[1];
   const xs = [...d.matchAll(/([-\d.]+) ([-\d.]+)/g)].map((m) => +m[1]);
   close(Math.max(...xs) - Math.min(...xs), 50, 0.02);
-  assert.match(svg, /<rect x="[\d.]+" y="[\d.]+" width="10" height="1.2"/);
+  // A 100 mm ruler with 101 millimetre ticks.
+  const ruler = svg.match(/<g id="scale-bar"><path d="M([\d.]+) ([\d.]+)H([\d.]+)([^"]*)"/);
+  close(+ruler[3] - +ruler[1], 100, 1e-9);
+  assert.equal((ruler[4].match(/v/g) || []).length, 101);
   assert.match(svg, />50 mm</);
   assert.match(svg, /Volcanic black/);
 });
 
-test('SVG loaf shows a height dimension', () => {
+test('SVG loaf shows a height dimension that fits on the page', () => {
   const G = 32;
   const mask = outlineMask('rectangle', G, 0.5);
   const labels = new Uint8Array(G * G).map((_, i) => (mask[i] ? 0 : 255));
   const { svg } = caneSVG({ labels, G, levels: 1, colours: ['#efeae0'], shape: 'rectangle', aspect: 0.5, size: 40 });
   assert.match(svg, />20 mm</);
+  // A wide loaf: the height label must stay inside the page width.
+  const wide = caneSVG({ labels, G, levels: 1, colours: ['#efeae0'], shape: 'rectangle', aspect: 0.5, size: 140 });
+  const x = +wide.svg.match(/<text x="([\d.]+)" y="[\d.]+" font-family="Menlo, monospace" font-size="2.8" fill="#1b1a18">70 mm/)[1];
+  assert.ok(x + 12 < wide.width - 3, `label at ${x} on a ${wide.width} mm page`);
+});
+
+test('compact SVG for the printed sheet drops the title and margins', () => {
+  const G = 32;
+  const mask = outlineMask('circle', G);
+  const labels = new Uint8Array(G * G).map((_, i) => (mask[i] ? 0 : 255));
+  const full = caneSVG({ labels, G, levels: 1, colours: ['#efeae0'], shape: 'circle', size: 80, title: 'T', key: false });
+  const compact = caneSVG({ labels, G, levels: 1, colours: ['#efeae0'], shape: 'circle', size: 80, title: 'T', key: false, compact: true });
+  assert.match(full.svg, />T</);
+  assert.doesNotMatch(compact.svg, />T</);
+  assert.ok(compact.height < full.height - 15);
+  const d = compact.svg.match(/id="cane-outline" d="([^"]+)"/)[1];
+  const xs = [...d.matchAll(/([-\d.]+) ([-\d.]+)/g)].map((m) => +m[1]);
+  close(Math.max(...xs) - Math.min(...xs), 80, 0.02);
 });
 
 test('print sheet lists clays and warnings', () => {
@@ -94,6 +115,9 @@ test('print sheet lists clays and warnings', () => {
   const html = printSheetHTML({ svg: '<svg></svg>', sheet, params: { size: 60, length: 150, target: 15, density: 1.9, waste: 10, minFeature: 1 }, meta: [{ label: 'Specimen', value: 'Osteon bone' }], title: 'Osteon bone' });
   assert.match(html, /Sandalwood stoneware/);
   assert.match(html, /below the 1.0 mm minimum/);
+  assert.doesNotMatch(html, /larger than the printable area/);
+  const big = printSheetHTML({ svg: '<svg></svg>', sheet, params: { size: 200, length: 150, target: 15, density: 1.9, waste: 10, minFeature: 1 }, meta: [], title: 'Big', fit: { page: 'A4', width: 228, height: 260, printWidth: 186, printHeight: 273 } });
+  assert.match(big, /228 × 260 mm\. It is larger than the printable area of A4 \(186 × 273 mm\)/);
 });
 
 import { defaultParams, toSession, fromSession } from '../src/state.js';

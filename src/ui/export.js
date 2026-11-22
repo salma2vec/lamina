@@ -14,14 +14,17 @@ function ready(app) {
 
 function title(app) { return app.source ? app.source.name : 'Cane'; }
 
-function svgFor(app, standalone, key = true) {
+function svgFor(app, standalone, key = true, compact = false) {
   const p = app.params;
   return caneSVG({
     labels: app.d.labels, G: app.G, levels: p.levels, colours: app.colours(),
     shape: p.outline.shape, aspect: p.outline.aspect, size: p.cane.size,
-    sheet: app.d.sheet, title: `${title(app)}, cane cross-section`, standalone, key,
+    sheet: app.d.sheet, title: `${title(app)}, cane cross-section`, standalone, key, compact,
   });
 }
+
+/** Printable area inside the 12 mm page margins, in mm. */
+const PRINTABLE = { A4: [186, 273], letter: [191.9, 255.4] };
 
 /** Specimen and slice metadata rows for the build sheet. */
 export function metadata(app) {
@@ -83,11 +86,13 @@ export async function runExport(kind, app, ctx) {
     const size = kind === 'print-a4' ? 'A4' : 'letter';
     document.getElementById('page-size').textContent = `@page { size: ${size}; margin: 12mm; }`;
     // The printed table lists the clays, so the template omits its own key.
-    const { svg } = svgFor(app, false, false);
+    const { svg, width, height } = svgFor(app, false, false, true);
+    const [printWidth, printHeight] = PRINTABLE[size];
+    const fit = { page: size === 'A4' ? 'A4' : 'Letter', width, height, printWidth, printHeight };
     const sheet = document.getElementById('print-sheet');
-    sheet.innerHTML = printSheetHTML({ svg, sheet: app.d.sheet, params: { ...app.params.cane, minFeature: app.params.cane.minReduced }, meta: metadata(app), title: title(app) });
+    sheet.innerHTML = printSheetHTML({ svg, sheet: app.d.sheet, params: { ...app.params.cane, minFeature: app.params.cane.minReduced }, meta: metadata(app), title: title(app), fit });
     window.print();
-    return null;
+    return width > printWidth || height > printHeight ? `The template is larger than ${fit.page} and will be cut off. Export the SVG instead.` : null;
   }
   throw new Error(`Unknown export "${kind}".`);
 }

@@ -19,4 +19,5 @@ html, body { background: #fff !important; color: #1b1a18 !important; height: aut
 .ps-clays thead th { color: #1b1a18; border-top: 0.3mm solid #1b1a18; }
 .ps-clays .sw { display: inline-block; width: 3mm; height: 3mm; border: 0.1mm solid #1b1a18; margin-right: 2mm; vertical-align: -0.4mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .ps-warn { margin: 0 0 3mm; padding-left: 4mm; color: #7a1f1f; }
+p.ps-fit { padding-left: 0; }
 .ps-note { color: #5f5a52; font-size: 8.5pt; }
