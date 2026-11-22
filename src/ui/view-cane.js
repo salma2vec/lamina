@@ -70,7 +70,7 @@ export class CaneView {
     ctx.beginPath();
     outlinePolygon(p.outline.shape, p.outline.aspect).forEach(([x, y], i) => (i ? ctx.lineTo(cx + x * size, cy - y * size) : ctx.moveTo(cx + x * size, cy - y * size)));
     ctx.closePath();
-    ctx.strokeStyle = cssVar('--rule-2');
+    ctx.strokeStyle = cssVar('--ink-3');
     ctx.lineWidth = 1;
     ctx.stroke();
     const pxPerMm = size / p.cane.size;
