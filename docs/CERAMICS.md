@@ -14,7 +14,7 @@ Lamina designs are for nerikomi: hand-built canes, sliced and assembled.
 
 ### 2.1 Prepare the coloured clays
 
-1. Weigh each clay as the build sheet specifies. The masses include 10% for waste.
+1. Weigh each clay as the build sheet specifies. The masses include a waste allowance, 10% by default. You can change it on the build sheet.
 2. To stain a clay, weigh the dry stain. Make a well in the clay, add the stain and a little water to make a paste, then wedge until the colour is even. [3] Some potters mix the dry stain into dry clay first, then add water, and let the clay stiffen on a plaster bat before wedging. [4]
 3. Wedge each colour until it is smooth and has no air bubbles. [4]
 4. Bring all colours to the same softness. If one clay is wetter or drier, let it rest until it matches. [4] Clays of different stiffness distort when you compress and reduce the cane.
@@ -40,7 +40,7 @@ Reduction makes the cross-section smaller and the cane longer. The pattern becom
 - **Squeezing.** Press the cane on all sides between thumbs and fingers held at right angles. This keeps a square section and keeps the pattern more intact. [5]
 - **Joining canes.** Shapes that tile (squares, hexagons) can be packed into a larger block and reduced again. [5]
 
-The ends of a reduced cane distort most. Trim them off. The 10% waste allowance on the build sheet covers this for most canes. Add more for long reductions.
+The ends of a reduced cane distort most. Trim them off. The default 10% waste allowance covers this for most canes. Add more for long reductions.
 
 ### 2.4 Slice and assemble
 
@@ -166,7 +166,7 @@ Mass per clay = region area × cane length × wet density × 1.10
 
 - Area and length are at template (pre-reduction) scale.
 - The default wet density is 1.9 g/cm³.
-- The factor 1.10 adds 10% for waste.
+- The factor 1.10 adds the default 10% for waste. Change the allowance on the build sheet and the factor changes with it.
 
 The default is consistent with typical clay: plastic clay at modelling stiffness contains about 19.5–22.5% water by wet weight [14], and clay minerals have a density of about 2.5 g/cm³ [15]. A 100 g lump with 21% water then has a volume of 79/2.5 + 21/1.0 ≈ 52.6 cm³, which gives about 1.9 g/cm³. Air pockets, grog, and stain change this value.
 

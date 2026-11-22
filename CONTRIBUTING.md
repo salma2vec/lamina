@@ -93,8 +93,10 @@ A change is ready when:
 
 In rough order:
 
-1. Loading real archive exports: large TIFF stacks, NRRD with oblique space directions, Deflate TIFF, detached `.nhdr`. Clear progress, a cancel button and plain errors.
-2. Print accuracy: the build sheet must print at exactly 1:1 on A4 and Letter from Chrome, Firefox and Safari. Add a ruler strip to make this easy to check.
-3. Speed: slice, clean-up and render at 256³ in under 150 ms on a laptop, so sliders stay smooth.
-4. Mesh sections with more than two clays, for example by distance from the outer surface.
-5. Accessibility: every control reachable by keyboard, visible focus, AA contrast in both themes.
+1. NRRD orientation: resample volumes whose space directions are oblique or flipped, so sections keep the specimen's true handedness.
+2. More formats: Deflate-compressed TIFF, BigTIFF and detached `.nhdr` files.
+3. Print checks in Firefox and Safari. Chrome prints the build sheet at 1:1 on A4 and Letter; the other browsers are untested.
+4. Speed: keep a full redraw under 150 ms at 256³. Clean-up computes region widths twice, and mesh welding uses string keys, which slows large meshes.
+5. Mesh sections with more than two clays, for example by distance from the outer surface.
+6. Touch: wheel zoom on the Slice and Cane canvases takes over page scrolling on tablets and phones.
+7. Naming: "Slab" labels both the slice averaging control and the pattern preview surface. One of them needs a new name.

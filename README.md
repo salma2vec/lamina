@@ -16,7 +16,7 @@ I made Lamina for my own ceramics: nerikomi pieces built from fossil structures 
 - **Clay palettes.** "Porcelain / Sandalwood stoneware / Volcanic black", "Stained porcelain", or your own list of two to six clays with name, colour and shrinkage. The cane is drawn with a light clay texture.
 - **Pattern.** Grid, brick, hex pack, four-way mirror and radial layouts. Rotation alternation, stretch along an axis, jitter and gap. Preview on a flat slab or on a vessel.
 - **Build sheet.** Reduction ratio, length after reduction, thinnest region at build, reduced and fired size, area share and wet mass per clay, fired size, and a warning when clay shrinkages differ by more than 1.5 percentage points.
-- **Exports.** SVG of the cross-section at true 1:1 scale in millimetres, with key, scale bar and dimensions. PNG of the cane and of the pattern. A printable build sheet for A4 or Letter. Session files in JSON.
+- **Exports.** SVG of the cross-section at true 1:1 scale in millimetres, with key, dimensions and a 100 mm ruler. Measure the ruler after printing to confirm the scale. PNG of the cane and of the pattern. A printable build sheet for A4 or Letter. Session files in JSON.
 - **Today.** A date-seeded study: the same specimen and plane for everyone on a given day, a 5, 10, 20 or 30 minute timer, and a Reveal button that shows Lamina's own cane for comparison.
 - **Offline.** No requests leave the page. On HTTPS hosts, a service worker keeps a copy for offline use after the first visit.
 
@@ -42,11 +42,11 @@ Lamina needs a current browser with ES modules, module workers, `OffscreenCanvas
 | Mesh | `.stl` | Binary and ASCII. Units are taken as millimetres. You can change the unit size. |
 | Mesh | `.ply` | ASCII, binary little-endian and binary big-endian. Polygons are triangulated. Point clouds are rejected. |
 | Mesh | `.obj` | Vertices and faces only. `v/vt/vn` syntax and negative indices are supported. |
-| Volume | `.nrrd` | Attached data only, raw or gzip encoding. Types uint8, int8, uint16, int16, uint32, int32, float32, float64. Voxel size from `space directions` or `spacings`. |
-| Volume | `.tif`, `.tiff` (multi-page) | 8, 16 or 32-bit greyscale or RGB. Uncompressed, LZW or PackBits. Deflate and BigTIFF are not supported. |
+| Volume | `.nrrd` | Attached data only, raw or gzip encoding. Types uint8, int8, uint16, int16, uint32, int32, float32, float64. Voxel size from `space directions` or `spacings`, in the units given by `space units` (millimetres if none). Directions set the voxel size only; oblique or flipped orientations are shown in index order. |
+| Volume | `.tif`, `.tiff` (multi-page) | 8, 16 or 32-bit greyscale or RGB. Uncompressed, LZW or PackBits. Voxel size is read from ImageJ metadata or resolution tags when present. Deflate and BigTIFF are not supported. |
 | Volume | several `.png`, `.jpg`, `.tif` files | One file per slice, sorted by name in natural order (`slice2` before `slice10`). All slices must have the same size. |
 | Image | single `.png`, `.jpg`, `.webp`, or one-page `.tif` | Goes straight to the cane step. Set the pixel size to get a scale bar in millimetres. |
-| Session | `.json` | Saved from Lamina. Holds parameters and a reference to the source, not the source data. |
+| Session | `.json` | Saved from Lamina. Holds parameters, a typed voxel size and a reference to the source, not the source data. Load the session, then the source file. |
 
 Volumes larger than 256 voxels on a side are box-filtered by an integer factor per axis. Intensities are clipped to the 0.1 and 99.9 percentiles. [docs/DATA.md](docs/DATA.md) lists open sources of fossil scans and explains how to convert DICOM series and other formats.
 
@@ -113,6 +113,8 @@ The 1.5-point limit is a working default. No published standard sets it. [docs/C
 | `S` | Save session |
 | `E` | Export menu |
 | `?` | Shortcut list |
+| `Esc` | Close a dialog, or cancel a load |
+| `←` `→` on a threshold | Move the threshold (Shift for larger steps) |
 
 ## Development
 
