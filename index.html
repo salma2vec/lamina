@@ -147,12 +147,13 @@
       <div class="seg" role="radiogroup" aria-label="Number of clays" id="levels-seg">
         <button data-levels="2">2</button><button data-levels="3">3</button><button data-levels="4">4</button><button data-levels="5">5</button><button data-levels="6">6</button>
       </div>
-      <canvas class="hist" id="hist" height="96"></canvas>
+      <canvas class="hist" id="hist" height="96" tabindex="0" role="slider" aria-label="Thresholds between clay levels" aria-valuemin="0" aria-valuemax="1"></canvas>
       <div class="row-buttons">
         <button id="auto-thresholds" title="Set thresholds by k-means">Auto thresholds</button>
         <button id="invert-mapping">Invert clays</button>
       </div>
       <ol class="level-list" id="level-list"></ol>
+      <p class="hint">Drag a red mark on the histogram to move a threshold. With the histogram selected, left and right arrows move a mark and up and down pick the next one.</p>
     </section>
     <section class="panel">
       <h2>Clean-up</h2>

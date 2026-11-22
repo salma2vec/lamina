@@ -6,7 +6,12 @@ export class Histogram {
     this.canvas = canvas;
     this.app = app;
     this.drag = -1;
+    /** Threshold that the arrow keys move. */
+    this.active = 0;
     new ResizeObserver(() => this.draw()).observe(canvas);
+    canvas.addEventListener('focus', () => this.draw());
+    canvas.addEventListener('blur', () => this.draw());
+    canvas.addEventListener('keydown', (e) => this.key(e));
     const pos = (e) => {
       const r = canvas.getBoundingClientRect();
       return Math.min(1, Math.max(0, (e.clientX - r.left - 4) / (r.width - 8)));
@@ -18,6 +23,7 @@ export class Histogram {
       let best = 0;
       t.forEach((v, i) => { if (Math.abs(v - x) < Math.abs(t[best] - x)) best = i; });
       this.drag = best;
+      this.active = best;
       canvas.setPointerCapture(e.pointerId);
       this.move(x);
     });
@@ -25,6 +31,24 @@ export class Histogram {
     const end = () => { this.drag = -1; };
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
+  }
+
+  /** Left and right move the active threshold (Shift for larger steps); up and down pick another. */
+  key(e) {
+    const t = this.app.params.thresholds;
+    if (!t.length || e.altKey || e.ctrlKey || e.metaKey) return;
+    this.active = Math.min(this.active, t.length - 1);
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      this.active = (this.active + (e.key === 'ArrowUp' ? 1 : t.length - 1)) % t.length;
+      this.draw();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const step = (e.shiftKey ? 0.05 : 0.005) * (e.key === 'ArrowRight' ? 1 : -1);
+      this.drag = this.active;
+      this.move(t[this.active] + step);
+      this.drag = -1;
+    } else return;
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   move(x) {
@@ -56,6 +80,13 @@ export class Histogram {
       ctx.fillRect(L + i * bw, base - bh, Math.max(1, bw - 0.6), bh);
     });
     const t = app.params.thresholds;
+    this.active = Math.min(this.active, Math.max(0, t.length - 1));
+    const focused = document.activeElement === this.canvas;
+    if (t.length) {
+      const a = t[this.active];
+      this.canvas.setAttribute('aria-valuenow', a.toFixed(3));
+      this.canvas.setAttribute('aria-valuetext', `Threshold ${this.active + 1} of ${t.length}: ${a.toFixed(3)}`);
+    }
     const cols = app.colours();
     const edges = [0, ...t, 1];
     for (let k = 0; k + 1 < edges.length; k++) {
@@ -66,10 +97,13 @@ export class Histogram {
     ctx.strokeRect(L + 0.5, h - band + 0.5, R - L - 1, band - 1);
     ctx.fillStyle = accent;
     ctx.strokeStyle = accent;
-    for (const v of t) {
+    t.forEach((v, i) => {
       const x = Math.round(L + v * (R - L)) + 0.5;
-      ctx.beginPath(); ctx.moveTo(x, 2); ctx.lineTo(x, h - band); ctx.lineWidth = 1; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x - 4, 0); ctx.lineTo(x + 4, 0); ctx.lineTo(x, 5); ctx.closePath(); ctx.fill();
-    }
+      // With keyboard focus, the mark the arrows move is drawn heavier.
+      const on = focused && i === this.active;
+      ctx.beginPath(); ctx.moveTo(x, 2); ctx.lineTo(x, h - band); ctx.lineWidth = on ? 2 : 1; ctx.stroke();
+      const k = on ? 6 : 4;
+      ctx.beginPath(); ctx.moveTo(x - k, 0); ctx.lineTo(x + k, 0); ctx.lineTo(x, k + 1); ctx.closePath(); ctx.fill();
+    });
   }
 }
