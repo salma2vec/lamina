@@ -11,7 +11,7 @@ export function renderLevels(root, app) {
   const t = [0, ...p.thresholds, 1];
   root.replaceChildren();
   for (let l = p.levels - 1; l >= 0; l--) {
-    const sel = el('select', { 'aria-label': `Clay for level ${l + 1}`, onchange: (e) => { p.mapping[l] = +e.target.value; app.changed('mapping'); } },
+    const sel = el('select', { 'aria-label': `Clay for level ${l + 1}`, title: (sw[p.mapping[l]] || sw[0]).name, onchange: (e) => { p.mapping[l] = +e.target.value; app.changed('mapping'); } },
       sw.map((s, i) => el('option', { value: i, text: s.name, selected: p.mapping[l] === i })));
     const chip = el('span', { class: 'chip' });
     chip.style.background = (sw[p.mapping[l]] || sw[0]).colour;

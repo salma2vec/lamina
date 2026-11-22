@@ -249,7 +249,7 @@ button.small { height: 22px; padding: 0 8px; font-size: 11.5px; }
 .hist { width: 100%; height: 96px; display: block; margin: 2px 0 0; cursor: ew-resize; touch-action: none; }
 .hist:focus-visible { outline: 1px solid var(--accent-ink); outline-offset: 2px; }
 .level-list { list-style: none; margin: 10px 0 0; padding: 0; }
-.level-list li { display: grid; grid-template-columns: 14px minmax(0, 1fr) 48px; align-items: center; gap: 8px; padding: 3px 0; }
+.level-list li { display: grid; grid-template-columns: 14px minmax(0, 1fr) 42px; align-items: center; gap: 6px; padding: 3px 0; }
 .level-list .chip { width: 14px; height: 14px; border: 1px solid var(--rule-2); }
 .level-list select { width: 100%; height: 24px; }
 .level-list .num { text-align: right; font-size: 11.5px; color: var(--ink-2); }
@@ -369,6 +369,8 @@ button.small { height: 22px; padding: 0 8px; font-size: 11.5px; }
   .today-bar .spacer { flex-basis: 100%; height: 0; }
   .today-body { grid-template-columns: 100%; overflow-y: auto; }
   .today-figure { min-height: 60vh; padding: 16px; }
+  .today-canvases { gap: 12px; }
+  .today-canvases.both canvas { width: calc(50% - 6px); }
   .today-side { border-left: 0; border-top: 1px solid var(--rule); }
   .timer { font-size: 44px; }
 }
