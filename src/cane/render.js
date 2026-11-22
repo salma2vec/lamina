@@ -15,6 +15,25 @@ function valueNoise(x, y, s) {
   return (a + (b - a) * ux) * (1 - uy) + (c + (d - c) * ux) * uy;
 }
 
+/** Grain and speck fields depend only on size and seed, so they are computed once and reused. */
+const textureCache = new Map();
+
+function texture(W, H, seed) {
+  const key = `${W}x${H}:${seed}`;
+  let t = textureCache.get(key);
+  if (!t) {
+    const grain = new Float32Array(W * H), speck = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      grain[i] = (valueNoise(x * 0.35, y * 0.35, seed) - 0.5) * 0.07 + (valueNoise(x * 0.06, y * 0.06, seed + 1) - 0.5) * 0.05;
+      speck[i] = hash(x, y, seed + 2) > 0.9965 ? 1 : 0;
+    }
+    if (textureCache.size > 4) textureCache.delete(textureCache.keys().next().value);
+    textureCache.set(key, (t = { grain, speck }));
+  }
+  return t;
+}
+
 /**
  * Render labels to RGBA with clay texture: soft edges, fine grain and sparse
  * specks. Pixels outside the outline are transparent.
@@ -46,26 +65,37 @@ export function renderCane(labels, w, h, colours, opt = {}) {
   // Premultiplied separable box blur, radius about one cane pixel.
   const r = Math.max(1, Math.round(s * 0.75));
   const tmp = new Float32Array(buf.length);
+  // Running sums over a window of 2r + 1 pixels, clipped at the edges. The
+  // horizontal pass weights colour by alpha (premultiplies); the vertical pass
+  // works on the premultiplied values.
   const pass = (src, dst, horiz) => {
-    const n = horiz ? W : H, m = horiz ? H : W;
+    const n = horiz ? W : H, m = horiz ? H : W, step = horiz ? 4 : W * 4;
     for (let a = 0; a < m; a++) {
+      const base = horiz ? a * W * 4 : a * 4;
+      let r0 = 0, g0 = 0, b0 = 0, a0 = 0, c = 0;
+      for (let t = 0; t <= Math.min(r, n - 1); t++) {
+        const o = base + t * step, al = src[o + 3], wt = horiz ? al : 1;
+        r0 += src[o] * wt; g0 += src[o + 1] * wt; b0 += src[o + 2] * wt; a0 += al; c++;
+      }
       for (let b = 0; b < n; b++) {
-        let r0 = 0, g0 = 0, b0 = 0, a0 = 0, c = 0;
-        for (let t = -r; t <= r; t++) {
-          const bb = b + t;
-          if (bb < 0 || bb >= n) continue;
-          const o = (horiz ? a * W + bb : bb * W + a) * 4;
-          const al = src[o + 3];
-          r0 += src[o] * (horiz ? al : 1); g0 += src[o + 1] * (horiz ? al : 1); b0 += src[o + 2] * (horiz ? al : 1); a0 += al; c++;
-        }
-        const o = (horiz ? a * W + b : b * W + a) * 4;
+        const o = base + b * step;
         dst[o] = r0 / c; dst[o + 1] = g0 / c; dst[o + 2] = b0 / c; dst[o + 3] = a0 / c;
+        const out = b - r, inn = b + r + 1;
+        if (out >= 0) {
+          const q = base + out * step, al = src[q + 3], wt = horiz ? al : 1;
+          r0 -= src[q] * wt; g0 -= src[q + 1] * wt; b0 -= src[q + 2] * wt; a0 -= al; c--;
+        }
+        if (inn < n) {
+          const q = base + inn * step, al = src[q + 3], wt = horiz ? al : 1;
+          r0 += src[q] * wt; g0 += src[q + 1] * wt; b0 += src[q + 2] * wt; a0 += al; c++;
+        }
       }
     }
   };
   pass(buf, tmp, true);
   pass(tmp, buf, false);
   const out = new Uint8ClampedArray(W * H * 4);
+  const { grain: grains, speck: specks } = texture(W, H, seed);
   for (let y = 0; y < H; y++) {
     const ly = (y / s) | 0;
     for (let x = 0; x < W; x++) {
@@ -76,10 +106,9 @@ export function renderCane(labels, w, h, colours, opt = {}) {
       if (tex > 0) {
         const l = labels[ly * w + ((x / s) | 0)];
         const L = l < lum.length ? lum[l] : 0.5;
-        const grain = (valueNoise(x * 0.35, y * 0.35, seed) - 0.5) * 0.07 + (valueNoise(x * 0.06, y * 0.06, seed + 1) - 0.5) * 0.05;
+        const grain = grains[y * W + x];
         let k = 1 + grain * tex;
-        const sp = hash(x, y, seed + 2);
-        if (sp > 0.9965) k *= L > 0.45 ? 0.72 : 1.45;
+        if (specks[y * W + x]) k *= L > 0.45 ? 0.72 : 1.45;
         R *= k; G *= k; B *= k;
         if (L < 0.3) { const lift = grain * 30 * tex; R += lift; G += lift; B += lift; }
       }

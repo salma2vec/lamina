@@ -160,3 +160,20 @@ test('tile layouts', () => {
   assert.ok(c.w < stretchedBox(10, 10, 2, 45).w);
   assert.ok(Math.abs(b.w - 20) < 1e-9 && Math.abs(b.h - 5) < 1e-9);
 });
+
+import { renderCane } from '../src/cane/render.js';
+
+test('cane render keeps clay colours and leaves the outside transparent', () => {
+  const G = 40;
+  const mask = outlineMask('circle', G);
+  const labels = new Uint8Array(G * G).map((_, i) => (mask[i] ? 0 : OUTSIDE));
+  const a = renderCane(labels, G, G, ['#c9a27a'], { scale: 2 });
+  const b = renderCane(labels, G, G, ['#c9a27a'], { scale: 2 });
+  assert.deepEqual(a.data, b.data);
+  assert.equal(a.data[3], 0); // corner pixel is outside the circle
+  const c = (G * 2 * G + G) * 4; // centre pixel
+  assert.equal(a.data[c + 3], 255);
+  let r = 0, n = 0;
+  for (let y = 30; y < 50; y++) for (let x = 30; x < 50; x++) { r += a.data[(y * G * 2 + x) * 4]; n++; }
+  assert.ok(Math.abs(r / n - 0xc9) < 8, `mean red ${r / n}`);
+});
