@@ -290,6 +290,8 @@ app.on('source', (s) => {
   $$('#specimen-list button').forEach((b) => b.classList.toggle('on', !!(s && s.synthetic && s.synthetic.id === b.dataset.id)));
   document.body.classList.toggle('no-volume', !s || s.kind !== 'volume');
   document.body.classList.toggle('no-plane', !s || s.kind === 'image');
+  // A single image has no plane to move: keep its dimmed controls out of the tab order too.
+  $('#plane-panel').inert = !s || s.kind === 'image';
   $('#empty').hidden = !!s;
   renderFacts($('#source-facts'), app);
   const sf = $('#scale-field');
