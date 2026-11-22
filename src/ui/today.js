@@ -10,6 +10,7 @@ import { histogram, initialThresholds, quantise } from '../cane/quantise.js';
 import { cleanup } from '../cane/morph.js';
 import { renderCane } from '../cane/render.js';
 import { PRESETS, defaultMapping } from '../cane/palette.js';
+import { defaultParams } from '../state.js';
 
 const G = 400;
 const WORDS = ['', '', 'two', 'three', 'four', 'five', 'six'];
@@ -109,7 +110,8 @@ export class Today {
       const levels = this.pick.spec.levels;
       const t = initialThresholds(histogram(this.values, this.mask), levels);
       let l = quantise(this.values, t, this.mask);
-      l = cleanup(l, G, G, { median: 1, openClose: 0, smooth: 1, minWidth: 2.5 / (60 / G), levels });
+      const d = defaultParams();
+      l = cleanup(l, G, G, { ...d.clean, minWidth: d.clean.minFeature / (d.cane.size / G), levels });
       const sw = PRESETS.sandalwood.swatches;
       const cols = defaultMapping(levels, sw).map((i) => sw[i].colour);
       this.cane = renderCane(l, G, G, cols, { scale: 1 });

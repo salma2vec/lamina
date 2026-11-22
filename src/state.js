@@ -11,7 +11,8 @@ export function defaultParams() {
     levels: 3,
     thresholds: [],
     mapping: [],
-    clean: { median: 1, openClose: 0, smooth: 1, minFeature: 2.5 },
+    // 3 mm at a 60 mm build, reduced 3:1 to 20 mm, keeps every region at least 1 mm wide (the warning limit).
+    clean: { median: 1, openClose: 0, smooth: 1, minFeature: 3 },
     outline: { shape: 'circle', aspect: 0.6, rotation: 0, zoom: 1, ox: 0, oy: 0 },
     palette: { preset: 'sandalwood', swatches: structuredClone(PRESETS.sandalwood.swatches) },
     cane: { size: 60, length: 150, target: 20, density: 1.9, waste: 10, minReduced: 1 },

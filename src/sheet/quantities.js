@@ -93,6 +93,8 @@ export function computeSheet(p) {
     smallestReduced,
     smallestFired: smallestReduced != null ? firedSize(smallestReduced, maxShrink) : null,
     featureWarn: smallestReduced != null && smallestReduced < p.minFeature,
+    // Minimum feature at build size that keeps every region at minFeature after reduction.
+    minBuildFeature: p.minFeature * ratio,
     firedMin: fired.length ? Math.min(...fired) : NaN,
     firedMax: fired.length ? Math.max(...fired) : NaN,
     compat,

@@ -49,6 +49,7 @@ test('build sheet aggregates per clay', () => {
   close(s.smallestReduced, 1.5 / 4);
   close(s.smallestFired, (1.5 / 4) * 0.87);
   assert.equal(s.featureWarn, true);
+  close(s.minBuildFeature, 4);
   assert.equal(s.compat.warn, false);
   close(porcelain.fired, 15 * 0.87, 1e-9);
   close(s.totalMass, s.clays.reduce((a, c) => a + c.mass, 0));
