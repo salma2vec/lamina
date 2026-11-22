@@ -253,9 +253,21 @@ button.small { height: 22px; padding: 0 8px; font-size: 11.5px; }
 .level-list .num { text-align: right; font-size: 11.5px; color: var(--ink-2); }
 .level-list .lvl { color: var(--ink-3); font-size: 10.5px; display: block; }
 
-#palette-preset { width: 100%; margin-bottom: 8px; }
+.presets { display: grid; margin: 0 0 10px; }
+.presets button {
+  display: flex; align-items: center; gap: 8px; width: 100%; height: auto; min-height: 28px;
+  padding: 4px 6px 4px 8px; border: none; border-left: 2px solid transparent; border-radius: 0;
+  text-align: left; white-space: normal; color: var(--ink-2);
+}
+.presets button + button { border-top: 1px solid var(--rule); }
+.presets button[aria-checked="true"] { border-left-color: var(--ink); color: var(--ink); }
+.presets .chips { display: inline-flex; flex: none; }
+.presets .chip { width: 9px; height: 14px; border: 1px solid var(--rule-2); }
+.presets .chip + .chip { border-left: 0; }
+.presets .pname { line-height: 1.3; }
+.swatch-head { display: grid; grid-template-columns: minmax(0, 1fr) 82px; gap: 6px; padding-left: 32px; color: var(--ink-3); font-size: 10.5px; }
 .swatches { list-style: none; margin: 0 0 8px; padding: 0; }
-.swatches li { display: grid; grid-template-columns: 26px minmax(0, 1fr) 62px 22px; gap: 6px; align-items: center; padding: 3px 0; }
+.swatches li { display: grid; grid-template-columns: 26px minmax(0, 1fr) 54px 22px; gap: 6px; align-items: center; padding: 3px 0; }
 .swatches input[type="color"] { width: 26px; height: 26px; padding: 0; border: 1px solid var(--rule-2); border-radius: 2px; background: none; cursor: pointer; }
 .swatches input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
 .swatches input[type="color"]::-webkit-color-swatch { border: none; }

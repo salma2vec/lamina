@@ -7,7 +7,7 @@ import { SliceView } from './ui/view-slice.js';
 import { CaneView } from './ui/view-cane.js';
 import { PatternView } from './ui/view-pattern.js';
 import { Histogram } from './ui/histogram.js';
-import { renderLevels, renderPalette, renderSheet, renderFacts } from './ui/panels.js';
+import { renderLevels, renderPresets, renderSwatches, renderSheet, renderFacts } from './ui/panels.js';
 import { loadFiles, syntheticVolume, cancelLoad } from './ui/loader.js';
 import { runExport } from './ui/export.js';
 import { Today } from './ui/today.js';
@@ -160,15 +160,25 @@ function randomPlane() {
 
 /* ---------- Palette ---------- */
 
-function drawPalette() { renderPalette($('#palette-preset'), $('#swatch-list'), $('#add-swatch'), app); }
-$('#palette-preset').addEventListener('change', (e) => {
-  const k = e.target.value;
-  if (!PRESETS[k]) return;
-  app.params.palette = { preset: k, swatches: structuredClone(PRESETS[k].swatches) };
-  app.params.mapping = defaultMapping(app.params.levels, app.params.palette.swatches);
+/** The last custom palette, kept while a preset is shown so it can be picked again. */
+let customPalette = null;
+
+function pickPalette(k) {
+  const pal = app.params.palette;
+  if (k === pal.preset) return;
+  if (pal.preset === 'custom') customPalette = structuredClone(pal.swatches);
+  const swatches = k === 'custom' ? structuredClone(customPalette) : structuredClone(PRESETS[k].swatches);
+  if (!swatches) return;
+  app.params.palette = { preset: k, swatches };
+  app.params.mapping = defaultMapping(app.params.levels, swatches);
   app.invalidate('render');
   drawPalette();
-});
+}
+const drawPresets = () => renderPresets($('#palette-presets'), app, customPalette, pickPalette);
+function drawPalette() {
+  drawPresets();
+  renderSwatches($('#swatch-list'), $('#add-swatch'), app);
+}
 $('#add-swatch').addEventListener('click', () => {
   const sw = app.params.palette.swatches;
   if (sw.length >= 6) return;
@@ -177,7 +187,8 @@ $('#add-swatch').addEventListener('click', () => {
   drawPalette();
 });
 app.on('palette', drawPalette);
-app.on('palette-light', () => { $('#palette-preset').value = 'custom'; });
+// Edits in the swatch list: refresh the preset list only, so the field being typed in keeps focus.
+app.on('palette-light', drawPresets);
 
 /* ---------- Source ---------- */
 

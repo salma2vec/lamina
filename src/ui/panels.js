@@ -20,21 +20,46 @@ export function renderLevels(root, app) {
   }
 }
 
-/** Palette preset selector and swatch editor. */
-export function renderPalette(presetSel, list, addBtn, app) {
+/**
+ * Palette presets as a radio list with colour chips and full names.
+ * @param {HTMLElement} root
+ * @param {import('./app.js').App} app
+ * @param {Object[]|null} custom last custom swatches, offered while a preset is shown
+ * @param {(id:string) => void} onPick
+ */
+export function renderPresets(root, app, custom, onPick) {
   const pal = app.params.palette;
-  presetSel.replaceChildren(
-    ...Object.entries(PRESETS).map(([k, v]) => el('option', { value: k, text: v.name, selected: pal.preset === k })),
-    el('option', { value: 'custom', text: 'Custom', selected: !PRESETS[pal.preset] }),
-  );
+  const items = Object.entries(PRESETS).map(([id, v]) => ({ id, name: v.name, swatches: v.swatches }));
+  if (!PRESETS[pal.preset]) items.push({ id: 'custom', name: 'Custom', swatches: pal.swatches });
+  else if (custom) items.push({ id: 'custom', name: 'Custom', swatches: custom });
+  root.replaceChildren(...items.map((it) => {
+    const chips = el('span', { class: 'chips', 'aria-hidden': 'true' }, it.swatches.map((sw) => {
+      const c = el('span', { class: 'chip' });
+      c.style.background = sw.colour;
+      return c;
+    }));
+    const on = pal.preset === it.id || (it.id === 'custom' && !PRESETS[pal.preset]);
+    const b = el('button', { role: 'radio', 'aria-checked': String(on), 'data-preset': it.id }, [chips, el('span', { class: 'pname', text: it.name })]);
+    b.addEventListener('click', () => onPick(it.id));
+    return b;
+  }));
+}
+
+/** Swatch editor: colour, name and shrinkage of each clay. */
+export function renderSwatches(list, addBtn, app) {
+  const pal = app.params.palette;
   list.replaceChildren();
   pal.swatches.forEach((s, i) => {
     const colour = el('input', { type: 'color', value: s.colour, 'aria-label': `Colour of ${s.name}` });
     colour.addEventListener('input', () => { s.colour = colour.value; app.changed('palette'); app.emit('palette-light'); });
-    const name = el('input', { type: 'text', value: s.name, 'aria-label': 'Clay name', maxlength: 40 });
-    name.addEventListener('input', () => { s.name = name.value || `Clay ${i + 1}`; app.changed('palette'); app.emit('palette-light'); });
+    const name = el('input', { type: 'text', value: s.name, 'aria-label': 'Clay name', maxlength: 40, title: s.name });
+    name.addEventListener('input', () => { s.name = name.value || `Clay ${i + 1}`; name.title = s.name; app.changed('palette'); app.emit('palette-light'); });
     const shrink = el('input', { type: 'number', value: s.shrinkage, min: 0, max: 30, step: 0.1, 'aria-label': `Shrinkage of ${s.name}, percent` });
-    shrink.addEventListener('input', () => { const v = parseFloat(shrink.value); if (Number.isFinite(v)) { s.shrinkage = v; app.changed('palette'); app.emit('palette-light'); } });
+    shrink.addEventListener('input', () => {
+      const v = parseFloat(shrink.value);
+      if (Number.isFinite(v) && v >= 0 && v <= 30) { s.shrinkage = v; app.changed('palette'); app.emit('palette-light'); }
+    });
+    shrink.addEventListener('change', () => { shrink.value = s.shrinkage; });
     const rm = el('button', { class: 'rm', title: 'Remove clay', 'aria-label': `Remove ${s.name}`, text: '×', disabled: pal.swatches.length <= 2 });
     rm.addEventListener('click', () => {
       pal.swatches.splice(i, 1);
