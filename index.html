@@ -128,8 +128,8 @@
           <label>Rotation <select data-key="pattern.alternate" id="pattern-alt"></select></label>
           <label class="tr">Stretch <input type="range" data-key="pattern.stretch" min="1" max="3" step="0.05"><output data-out="pattern.stretch" data-unit="x"></output></label>
           <label class="tr">Axis <input type="range" data-key="pattern.stretchAngle" min="0" max="180" step="5"><output data-out="pattern.stretchAngle" data-unit="deg"></output></label>
-          <label class="tr">Tile <input type="range" data-key="pattern.tile" min="0.12" max="0.6" step="0.01"></label>
-          <label class="tr">Gap <input type="range" data-key="pattern.gap" min="0" max="0.4" step="0.01"></label>
+          <label class="tr" title="Slice size as a share of the preview's shorter side">Tile <input type="range" data-key="pattern.tile" min="0.12" max="0.6" step="0.01"><output data-out="pattern.tile" data-unit="pct"></output></label>
+          <label class="tr" title="Space between slices as a share of the slice size">Gap <input type="range" data-key="pattern.gap" min="0" max="0.4" step="0.01"><output data-out="pattern.gap" data-unit="pct"></output></label>
           <label class="check"><input type="checkbox" data-key="pattern.jitter"> Jitter</label>
           <span class="seg small" id="preview-seg"><button data-preview="slab">Slab</button><button data-preview="vessel">Vessel</button></span>
         </div>
@@ -158,17 +158,17 @@
     <section class="panel">
       <h2>Clean-up</h2>
       <div class="field range">
-        <label for="clean-median">Majority</label>
+        <label for="clean-median" title="Each pixel takes the clay most common around it, within this radius. Removes speckle.">Majority</label>
         <input type="range" id="clean-median" data-key="clean.median" min="0" max="4" step="1">
         <output data-out="clean.median" data-unit="px"></output>
       </div>
       <div class="field range">
-        <label for="clean-oc">Open/close</label>
+        <label for="clean-oc" title="Removes spurs and fills gaps narrower than twice this radius.">Open/close</label>
         <input type="range" id="clean-oc" data-key="clean.openClose" min="0" max="4" step="1">
         <output data-out="clean.openClose" data-unit="px"></output>
       </div>
       <div class="field range">
-        <label for="clean-smooth">Smooth</label>
+        <label for="clean-smooth" title="Rounds the boundaries between clays. Larger values give softer curves.">Smooth</label>
         <input type="range" id="clean-smooth" data-key="clean.smooth" min="0" max="4" step="0.25">
         <output data-out="clean.smooth" data-unit="px"></output>
       </div>
@@ -177,7 +177,7 @@
         <input type="range" id="clean-min" data-key="clean.minFeature" min="0" max="8" step="0.1">
         <output data-out="clean.minFeature" data-unit="mm"></output>
       </div>
-      <p class="hint">Regions narrower than the minimum feature, at build size, merge into their neighbours. This removes specks and fills pinholes.</p>
+      <p class="hint">Regions narrower than the minimum feature, at build size, merge into their neighbours. This removes specks and fills pinholes. Pixel values refer to the 320-pixel cane grid.</p>
     </section>
     <section class="panel">
       <h2>Outline</h2>

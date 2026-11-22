@@ -16,6 +16,7 @@ export function formatOut(v, unit, lenUnit) {
     case 'mm': return `${fx(v, 1)} mm`;
     case 'x': return `${fx(v, 2)}×`;
     case 'ratio': return fx(v, 2);
+    case 'pct': return `${fx(v * 100, 0)}%`;
     default: return String(v);
   }
 }
