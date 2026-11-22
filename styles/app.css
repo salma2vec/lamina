@@ -216,7 +216,9 @@ button.small { height: 22px; padding: 0 8px; font-size: 11.5px; }
 .views.split .view { display: block; background: var(--bg); }
 .view canvas, .view .gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .view .gl canvas { width: 100%; height: 100%; display: block; }
-#view-pattern canvas { bottom: 40px; height: calc(100% - 40px); }
+/* Pattern: canvas above a toolbar that wraps, so every control stays reachable. */
+#view-pattern.active, .views.split #view-pattern { display: flex; flex-direction: column; }
+#view-pattern canvas { position: relative; inset: auto; flex: 1 1 0; min-height: 0; height: auto; }
 #slice-canvas, #cane-canvas { cursor: grab; touch-action: none; }
 #slice-canvas.dragging, #cane-canvas.dragging { cursor: grabbing; }
 .cap {
@@ -225,18 +227,17 @@ button.small { height: 22px; padding: 0 8px; font-size: 11.5px; }
 }
 .cap b { font: 400 13px var(--serif); color: var(--ink); margin-right: 8px; }
 .toolbar {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 40px; z-index: 2;
-  display: flex; align-items: center; gap: 14px; padding: 0 12px;
+  position: relative; flex: none; z-index: 2;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 7px 12px;
   border-top: 1px solid var(--rule); background: var(--bg);
-  overflow-x: auto; scrollbar-width: none; white-space: nowrap;
+  white-space: nowrap;
 }
 .toolbar label { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
 .toolbar select { height: 24px; }
 .toolbar .tr input { width: 74px; }
 .toolbar output { font-size: 11px; min-width: 34px; color: var(--ink); }
 .toolbar .seg { margin: 0; }
-.views.split .toolbar { height: 34px; gap: 10px; }
-.views.split #view-pattern canvas { bottom: 34px; height: calc(100% - 34px); }
+.views.split .toolbar { gap: 4px 10px; padding: 5px 10px; }
 .empty {
   position: absolute; inset: 0; display: grid; place-content: center; text-align: center;
   padding: 24px; color: var(--ink-2); max-width: 460px; margin: auto;
