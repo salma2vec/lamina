@@ -72,7 +72,7 @@ async function loadImage(file, progress) {
 
 async function loadNRRD(file, progress) {
   progress(0, 'Reading NRRD');
-  const v = await parseNRRD(await file.arrayBuffer());
+  const v = await parseNRRD(await file.arrayBuffer(), (label) => progress(0.02, label));
   const [nx, ny, nz] = v.dims;
   if (nz === 1) return { type: 'image', image: asImage(v.data, nx, ny), spacing: v.spacing ? v.spacing[0] : null };
   progress(0.05, 'Downsampling');

@@ -74,9 +74,10 @@ export async function gunzip(bytes) {
 /**
  * Parse a NRRD volume.
  * @param {ArrayBuffer} buf
+ * @param {(label:string)=>void} [onStage] told when a slow step starts
  * @returns {Promise<{dims:number[], spacing:number[]|null, data:ArrayLike<number>, type:string}>}
  */
-export async function parseNRRD(buf) {
+export async function parseNRRD(buf, onStage) {
   const bytes = new Uint8Array(buf);
   const { fields, dataStart } = parseNRRDHeader(bytes);
   if (fields['data file'] || fields.datafile) throw new Error('Detached NRRD (.nhdr with a separate data file) is not supported. Save as a single .nrrd file.');
@@ -94,7 +95,10 @@ export async function parseNRRD(buf) {
   const enc = (fields.encoding || 'raw').toLowerCase();
   let raw;
   if (enc === 'raw') raw = bytes.subarray(dataStart);
-  else if (enc === 'gzip' || enc === 'gz') raw = await gunzip(bytes.subarray(dataStart));
+  else if (enc === 'gzip' || enc === 'gz') {
+    if (onStage) onStage('Decompressing');
+    raw = await gunzip(bytes.subarray(dataStart));
+  }
   else throw new Error(`Unsupported NRRD encoding "${enc}". Use raw or gzip.`);
   const count = sizes[0] * sizes[1] * sizes[2];
   const bpe = Ctor.BYTES_PER_ELEMENT;
