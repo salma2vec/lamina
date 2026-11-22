@@ -48,8 +48,10 @@ export class Today {
   }
 
   close() {
+    if (this.root.hidden) return;
     this.root.hidden = true;
     this.pause();
+    if (this.onClose) this.onClose();
   }
 
   async load(pick, daily) {

@@ -336,13 +336,26 @@ $('#session-input').addEventListener('change', async (e) => {
 /* ---------- Export menu ---------- */
 
 const menu = $('#export-menu');
-const toggleMenu = (open = menu.hidden) => {
+const toggleMenu = (open = menu.hidden, refocus = false) => {
   menu.hidden = !open;
   $('#export-toggle').setAttribute('aria-expanded', String(open));
   if (open) menu.querySelector('button').focus();
+  else if (refocus) $('#export-toggle').focus();
 };
 $('#export-toggle').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
 document.addEventListener('click', (e) => { if (!menu.hidden && !menu.contains(e.target)) toggleMenu(false); });
+// Arrow keys move through the menu and never reach the plane shortcuts.
+menu.addEventListener('keydown', (e) => {
+  const items = $$('button', menu);
+  const i = items.indexOf(document.activeElement);
+  const to = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
+  if (to !== undefined) {
+    e.preventDefault();
+    items[(to + items.length) % items.length].focus();
+  }
+  if (e.key !== 'Escape') e.stopPropagation();
+});
+menu.addEventListener('focusout', (e) => { if (!menu.hidden && !$('.menu-wrap').contains(e.relatedTarget)) toggleMenu(false); });
 async function doExport(kind) {
   toggleMenu(false);
   try {
@@ -356,18 +369,45 @@ $$('[data-export]').forEach((b) => b.addEventListener('click', () => doExport(b.
 
 /* ---------- Overlays ---------- */
 
+/* While a dialog is open, everything behind it is inert, so Tab stays inside it. */
 const help = $('#help');
-$('#help-toggle').addEventListener('click', () => { help.hidden = !help.hidden; });
-help.addEventListener('click', (e) => { if (e.target === help) help.hidden = true; });
+let helpReturn = null, todayReturn = null;
+function setInert() {
+  $('#app').inert = !help.hidden || today.isOpen;
+  $('#today').inert = !help.hidden && today.isOpen;
+}
+function showHelp(on) {
+  if (on === !help.hidden) return;
+  if (on) helpReturn = document.activeElement;
+  help.hidden = !on;
+  setInert();
+  if (on) $('.close', help).focus();
+  else if (helpReturn && helpReturn.focus) helpReturn.focus();
+}
+function openToday() {
+  if (today.isOpen) return;
+  todayReturn = document.activeElement;
+  toggleMenu(false);
+  today.open();
+  setInert();
+  $('#timer-start').focus();
+}
+$('#help-toggle').addEventListener('click', () => showHelp(help.hidden));
+help.addEventListener('click', (e) => { if (e.target === help) showHelp(false); });
 $$('[data-close]').forEach((b) => b.addEventListener('click', () => {
-  if (b.dataset.close === 'today') today.close(); else $(`#${b.dataset.close}`).hidden = true;
+  if (b.dataset.close === 'today') today.close(); else showHelp(false);
 }));
 
 const today = new Today((pick) => loadSynthetic(pick.id, { plane: pick.plane, crop: pick.crop, levels: pick.spec.levels }), toast);
-$('#open-today').addEventListener('click', () => today.open());
+today.onClose = () => {
+  setInert();
+  const back = todayReturn && document.contains(todayReturn) ? todayReturn : $('#open-today');
+  back.focus();
+};
+$('#open-today').addEventListener('click', openToday);
 
 installShortcuts({
-  escape: () => { if (!help.hidden) help.hidden = true; else if (!menu.hidden) toggleMenu(false); else if (today.isOpen) today.close(); else cancelLoad(); },
+  escape: () => { if (!help.hidden) showHelp(false); else if (!menu.hidden) toggleMenu(false, true); else if (today.isOpen) today.close(); else cancelLoad(); },
   view: (e) => { if (!today.isOpen) setView(['3d', 'slice', 'cane', 'pattern'][+e.key - 1]); },
   offset: (e) => {
     if (today.isOpen || !app.source || app.source.kind === 'image') return;
@@ -401,11 +441,11 @@ installShortcuts({
     syncAll();
   },
   random: () => { if (today.isOpen) $('#today-random').click(); else randomPlane(); },
-  save: () => doExport('session-save'),
-  export: () => toggleMenu(true),
-  help: () => { help.hidden = !help.hidden; },
-  split: () => { split = !split; refreshVisibility(); },
-  today: () => { if (!today.isOpen) today.open(); },
+  save: () => { if (!today.isOpen && help.hidden) doExport('session-save'); },
+  export: () => { if (!today.isOpen && help.hidden) toggleMenu(true); },
+  help: () => showHelp(help.hidden),
+  split: () => { if (!today.isOpen && help.hidden) { split = !split; refreshVisibility(); } },
+  today: () => { if (help.hidden) openToday(); },
 });
 
 /* ---------- Pipeline updates ---------- */
