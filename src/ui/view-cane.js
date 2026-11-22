@@ -1,7 +1,7 @@
 /** Cane view: the rendered cross-section at build size with dimensions and key. */
 import { fitCanvas, cssVar, fx } from './dom.js';
 import { scaleBar } from './view-slice.js';
-import { outlineHeight, SHAPES } from '../cane/outline.js';
+import { outlineHeight, outlinePolygon, SHAPES } from '../cane/outline.js';
 
 export class CaneView {
   constructor(canvas, cap, app) {
@@ -66,6 +66,13 @@ export class CaneView {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(app.caneCanvas, cx - size / 2, cy - size / 2, size, size);
+    // A hairline outline keeps the edge visible where a clay matches the page colour.
+    ctx.beginPath();
+    outlinePolygon(p.outline.shape, p.outline.aspect).forEach(([x, y], i) => (i ? ctx.lineTo(cx + x * size, cy - y * size) : ctx.moveTo(cx + x * size, cy - y * size)));
+    ctx.closePath();
+    ctx.strokeStyle = cssVar('--rule-2');
+    ctx.lineWidth = 1;
+    ctx.stroke();
     const pxPerMm = size / p.cane.size;
     // Width dimension line.
     const yb = cy + (size * hf) / 2 + 22;
