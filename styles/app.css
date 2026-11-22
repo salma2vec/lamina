@@ -311,7 +311,7 @@ button.small { height: 22px; padding: 0 8px; font-size: 11.5px; }
 /* Today */
 .today { position: fixed; inset: 0; z-index: 45; background: var(--bg); display: grid; grid-template-rows: var(--bar) minmax(0, 1fr); }
 .today-bar { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--rule); }
-.today-date { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-2); margin-left: 6px; }
+.today-date { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-2); margin-left: 6px; white-space: nowrap; }
 .spacer { flex: 1; }
 .today-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; min-height: 0; }
 .today-figure { margin: 0; display: flex; flex-direction: column; justify-content: center; min-height: 0; padding: 28px; gap: 22px; }
@@ -352,7 +352,7 @@ button.small { height: 22px; padding: 0 8px; font-size: 11.5px; }
   .rail.right { border-left: 0; border-top: 1px solid var(--rule); display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); overflow: visible; }
   .rail.right .panel { border-right: 1px solid var(--rule); }
   .specimen { display: none; }
-  .tag { display: none; }
+  .bar .tag { display: none; }
 }
 /* Phone */
 @media (max-width: 640px) {
@@ -364,6 +364,9 @@ button.small { height: 22px; padding: 0 8px; font-size: 11.5px; }
   .rail.left { max-height: none; border-right: 0; }
   .rail.right { grid-template-columns: 100%; }
   .views.split { grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr); }
+  .today { grid-template-rows: auto minmax(0, 1fr); }
+  .today-bar { flex-wrap: wrap; gap: 6px 8px; padding: 8px 10px; }
+  .today-bar .spacer { flex-basis: 100%; height: 0; }
   .today-body { grid-template-columns: 100%; overflow-y: auto; }
   .today-figure { min-height: 60vh; padding: 16px; }
   .today-side { border-left: 0; border-top: 1px solid var(--rule); }
