@@ -1,5 +1,5 @@
 /** Shared helpers for constructed cane templates. Pure; no DOM. */
-import { OUTSIDE } from '../cane/morph.js';
+import { OUTSIDE, removeThinRegions } from '../cane/morph.js';
 import { insideOutline } from '../cane/outline.js';
 
 /**
@@ -32,6 +32,20 @@ export function rasterise(labelAt, o) {
     }
   }
   return out;
+}
+
+/**
+ * Merge regions narrower than the thinnest sheet in the design into their
+ * neighbours. Rasterising curved walls leaves one-pixel slivers where walls
+ * meet; nobody can build those, so they should not set the thinnest region.
+ * @param {Uint8Array} labels
+ * @param {number} G grid size
+ * @param {number} sheetMm thinnest sheet the design calls for
+ * @param {number} sizeMm cane width D
+ */
+export function dropSlivers(labels, G, sheetMm, sizeMm) {
+  const px = Math.max(2, 0.8 * (sheetMm / sizeMm) * G);
+  return removeThinRegions(labels, G, G, px);
 }
 
 /** Deterministic hash of two integers to [0, 1). */

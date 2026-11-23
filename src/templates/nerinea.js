@@ -8,7 +8,7 @@
  * (parietal) and the outer wall (palatal). Each cavity holds sediment below
  * a flat geopetal surface, with sparry calcite above.
  */
-import { rasterise, mm } from './common.js';
+import { rasterise, dropSlivers, mm } from './common.js';
 
 const MATRIX = 0, WALL = 1, CALCITE = 2, SEDIMENT = 3;
 
@@ -95,7 +95,7 @@ export const nerinea = {
       return (y - lo) / (hi - lo) < v.sediment ? SEDIMENT : CALCITE;
     };
 
-    const labels = rasterise(labelAt, { G: ctx.G, shape: ctx.shape, aspect: ctx.aspect, levels: 4 });
+    const labels = dropSlivers(rasterise(labelAt, { G: ctx.G, shape: ctx.shape, aspect: ctx.aspect, levels: 4 }), ctx.G, v.wall, D);
 
     const baseH = (shellH(-0.5) - c) * D - v.wall;
     const apexH = (shellH(0.5) - c) * D - v.wall;

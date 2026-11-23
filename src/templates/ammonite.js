@@ -7,7 +7,7 @@
  *   Septa divide each whorl into equal angular steps and bow towards the aperture.
  *   The last part of the outer whorl is the body chamber, filled with matrix.
  */
-import { rasterise, hash01, mm } from './common.js';
+import { rasterise, dropSlivers, hash01, mm } from './common.js';
 
 const MATRIX = 0, WALL = 1, LINING = 2, FILL_A = 3, FILL_B = 4, FILL_C = 5;
 const TAU = 2 * Math.PI;
@@ -101,7 +101,8 @@ export const ammonite = {
       return fillFor(c, (c + 0.5) * step);
     };
 
-    const labels = rasterise(labelAt, { G: ctx.G, shape: ctx.shape, aspect: ctx.aspect, levels: 6 });
+    const raw = rasterise(labelAt, { G: ctx.G, shape: ctx.shape, aspect: ctx.aspect, levels: 6 });
+    const labels = dropSlivers(raw, ctx.G, v.lining > 0 ? Math.min(v.wall, v.lining) : v.wall, D);
 
     // Assembly plan at build size.
     const groups = [];
