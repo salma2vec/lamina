@@ -140,7 +140,10 @@ export class CaneMode {
     const key = `${p.outline.shape}:${p.outline.aspect}:${D}:${ratio}`;
     if (key === this.key) return false;
     this.key = key;
-    for (const c of [...this.group.children]) { this.group.remove(c); c.geometry.dispose(); }
+    for (const c of [...this.group.children]) {
+      this.group.remove(c);
+      c.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    }
     const loop = softOutline(p.outline.shape, p.outline.aspect);
     this.loop = loop;
     const hf = outlineHeight(p.outline.shape, p.outline.aspect);

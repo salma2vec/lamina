@@ -378,6 +378,7 @@ kbd {
   .panel {
     left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important;
     width: auto; max-height: 64vh; border-radius: 14px 14px 0 0; border-bottom: 0;
+    background: var(--panel-solid);
     padding: 6px 18px 22px;
   }
   .panel .grab { display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--line-3); margin: 4px auto 12px; }
