@@ -120,14 +120,14 @@ export function renderSheet(root, app) {
   for (const w of warnings(app)) root.append(w);
   const a = assembly(app);
   if (a) {
-    const rows = a.parts.map((q) => el('tr', {}, [
-      el('th', {}, [q.colour ? chip(q.colour, 'sw') : '', q.name]),
-      el('td', { class: 'num', text: q.qty ? `${q.qty} ×` : '' }),
-      el('td', { text: q.size, title: q.clay || 'Mixed clays' }),
+    const items = a.parts.map((q) => el('li', { title: q.clay || 'Mixed clays' }, [
+      el('span', { class: 'n' }, [q.colour ? chip(q.colour, 'sw') : '', q.name]),
+      el('span', { class: 'q', text: q.qty ? `${q.qty} ×` : '' }),
+      el('span', { class: 's', text: q.size }),
     ]));
     root.append(el('div', { class: 'assembly' }, [
       el('h3', { text: 'Parts' }),
-      el('table', { class: 'parts' }, [el('tbody', {}, rows)]),
+      el('ul', { class: 'parts' }, items),
       el('h3', { text: 'Steps' }),
       el('ol', { class: 'steps' }, a.steps.map((t) => el('li', { text: t }))),
     ]));
@@ -146,7 +146,10 @@ export function warnings(app) {
     out.push(el('p', { class: 'warn', text: `"Reduce to" is ${fx(p.target, 1)} mm, which is not smaller than the ${fx(p.size, 1)} mm cane. Set a smaller reduced size.` }));
   }
   if (s.featureWarn) {
-    out.push(el('p', { class: 'warn', text: `The thinnest region is ${fx(s.smallestReduced, 2)} mm after reduction, below ${fx(p.minReduced, 1)} mm. Set the minimum feature to at least ${fx(Math.ceil(s.minBuildFeature * 10) / 10, 1)} mm, or reduce less.` }));
+    const fix = app.source && app.source.kind === 'template'
+      ? 'Make the thinnest parts thicker, use a larger cane, or reduce less.'
+      : `Set the minimum feature to at least ${fx(Math.ceil(s.minBuildFeature * 10) / 10, 1)} mm, or reduce less.`;
+    out.push(el('p', { class: 'warn', text: `The thinnest region is ${fx(s.smallestReduced, 2)} mm after reduction, below ${fx(p.minReduced, 1)} mm. ${fix}` }));
   }
   if (s.compat.warn) {
     const w = el('p', { class: 'warn' }, [`Shrinkage differs by ${fx(s.compat.spread, 1)} percentage points between these clays. The cane can crack in drying or firing. Test the combination first. `]);

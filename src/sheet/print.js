@@ -44,9 +44,8 @@ export function printSheetHTML(p) {
 </table>
 <table class="ps-clays"><thead><tr><th>Clay</th><th class="num">Area %</th><th class="num">Area mm²</th><th class="num">Volume cm³</th><th class="num">Wet g</th><th class="num">Shrink %</th><th class="num">Fired mm</th></tr></thead><tbody>${rows}</tbody></table>
 ${warnings.length ? `<ul class="ps-warn">${warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
-${p.assembly ? assemblyHTML(p.assembly) : ''}
 <p class="ps-note">Check the 100 mm ruler on the template with a real ruler before you cut. If it measures more or less than 100 mm, the print is scaled: print again at 100 %. Masses include the waste allowance. Fired sizes apply to the reduced cane.</p>
-</section>`;
+</section>${p.assembly ? assemblyHTML(p.assembly) : ''}`;
 }
 
 /** Parts list and numbered steps of a constructed cane. */
