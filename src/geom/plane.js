@@ -68,3 +68,32 @@ export function planeBoxHalfExtent(size, f) {
   }
   return hit ? m : 0;
 }
+
+/**
+ * Intersection of the plane with a centred box, as a convex polygon in the
+ * plane's (u, v) coordinates relative to its origin, in counter-clockwise
+ * order. Returns an empty array if the plane misses the box.
+ * @param {number[]} size box size [x,y,z]
+ * @param {{origin:number[], u:number[], v:number[], n:number[]}} f
+ * @returns {number[][]}
+ */
+export function planeBoxPolygon(size, f) {
+  const h = size.map((s) => s / 2);
+  const corners = [];
+  for (let i = 0; i < 8; i++) corners.push([i & 1 ? h[0] : -h[0], i & 2 ? h[1] : -h[1], i & 4 ? h[2] : -h[2]]);
+  const edges = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+  const od = dot(f.origin, f.n);
+  const pts = [];
+  const eps = 1e-9 * Math.max(...size, 1);
+  for (const [a, b] of edges) {
+    const da = dot(corners[a], f.n) - od, db = dot(corners[b], f.n) - od;
+    if ((da > eps && db > eps) || (da < -eps && db < -eps)) continue;
+    const t = Math.abs(da - db) < eps ? 0 : da / (da - db);
+    const p = corners[a].map((c, k) => c + (corners[b][k] - c) * t - f.origin[k]);
+    const q = [dot(p, f.u), dot(p, f.v)];
+    if (!pts.some((r) => Math.abs(r[0] - q[0]) < eps * 10 && Math.abs(r[1] - q[1]) < eps * 10)) pts.push(q);
+  }
+  if (pts.length < 3) return [];
+  const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+  return pts.sort((p, q) => Math.atan2(p[1] - cy, p[0] - cx) - Math.atan2(q[1] - cy, q[0] - cx));
+}
