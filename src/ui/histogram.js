@@ -74,7 +74,7 @@ export class Histogram {
     const L = 4, R = w - 4, band = 10, base = h - band - 4;
     ctx.fillStyle = rule;
     ctx.fillRect(L, base, R - L, 1);
-    if (!c) return;
+    if (!c || !c.hist) return;
     const hist = c.hist;
     let mx = 0;
     for (const v of hist) mx = Math.max(mx, Math.sqrt(v));

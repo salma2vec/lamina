@@ -127,7 +127,7 @@ export class CaneMode {
   }
 
   /** Three-quarter view onto the end face. */
-  viewDir() { return new THREE.Vector3(0.52, -1, 0.5); }
+  viewDir() { return new THREE.Vector3(0.5, -1, 0.46); }
 
   /**
    * Rebuild the log for the current outline and sizes when they change.
@@ -136,7 +136,8 @@ export class CaneMode {
   build(app) {
     const p = app.params;
     const D = p.cane.size;
-    const ratio = Math.min(2.4, Math.max(1.1, p.cane.length / D));
+    // Shown shorter than a real cane, so the end stays the subject.
+    const ratio = Math.min(1.7, Math.max(1.1, p.cane.length / D));
     const key = `${p.outline.shape}:${p.outline.aspect}:${D}:${ratio}`;
     if (key === this.key) return false;
     this.key = key;
@@ -192,7 +193,7 @@ export class CaneMode {
     const side = new Uint8Array(U * V * 4);
     const { pts, nrm } = this.loop;
     const n = pts.length;
-    const inset = 5 / W;
+    const inset = 6 / W;
     let seg = 0;
     for (let x = 0; x < U; x++) {
       const u = (x + 0.5) / U;
@@ -201,10 +202,16 @@ export class CaneMode {
       const a = pts[seg], b = pts[(seg + 1) % n], na = nrm[seg], nb = nrm[(seg + 1) % n];
       const px = a[0] + (b[0] - a[0]) * t - (na[0] + nb[0]) * 0.5 * inset;
       const py = a[1] + (b[1] - a[1]) * t - (na[1] + nb[1]) * 0.5 * inset;
-      const ix = Math.min(W - 1, Math.max(0, Math.round((0.5 + px * 0.985) * W)));
-      const iy = Math.min(img.height - 1, Math.max(0, Math.round((0.5 - py * 0.985) * img.height)));
-      const o = (iy * W + ix) * 4;
-      const r = img.data[o], g = img.data[o + 1], bl = img.data[o + 2];
+      // Average a small patch, so a single speck in the clay texture does not become a stripe.
+      const cx = (0.5 + px * 0.985) * W, cy = (0.5 - py * 0.985) * img.height;
+      let r = 0, g = 0, bl = 0, cnt = 0;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const ix = Math.min(W - 1, Math.max(0, Math.round(cx + dx))), iy = Math.min(img.height - 1, Math.max(0, Math.round(cy + dy)));
+        const o = (iy * W + ix) * 4;
+        if (img.data[o + 3] < 128) continue;
+        r += img.data[o]; g += img.data[o + 1]; bl += img.data[o + 2]; cnt++;
+      }
+      if (cnt) { r /= cnt; g /= cnt; bl /= cnt; }
       for (let y = 0; y < V; y++) {
         const k = 1 + (hash(x >> 1, y) - 0.5) * 0.05 + (hash(x >> 3, 99) - 0.5) * 0.04;
         const q = (y * U + x) * 4;
