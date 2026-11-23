@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- New interface: the viewport fills the screen, with thin toolbars at the edges and one small panel open at a time. Panels become a bottom sheet on phones.
+- Three modes, all in 3D: Section (the specimen cut by the plane, with the section on the cut face), Cane (a clay log with a slice lifted off its end) and Pattern (the slices on a slab or a bowl). Section and Cane also have a flat view with a scale bar.
+- Volumes are shown as a surface at an adjustable level, built in a worker.
+- Clay chips for the cane sit under the scene. Thresholds, clean-up and the build numbers are in panels.
+- Cane templates (ammonite and Nerinea) with parameters, parts and assembly steps on the build sheet. Sessions store the template and its values.
+- The slice averaging control is now called Thickness; Slab names only the pattern form.
+- `?still=section|cane|pattern` hides the interface for still images.
+
 ## 0.1.0 (2026-11-22)
 
 First release.
