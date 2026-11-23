@@ -45,12 +45,12 @@ export class ContactShadow {
     this.camera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0, 1);
     this.camera.rotation.x = Math.PI;
     this.depth = new THREE.MeshDepthMaterial();
-    this.depth.userData.darkness = { value: 1.4 };
+    // Darkness fades with height above the floor. The constant lives in the shader text,
+    // so every shadow can share one program.
     this.depth.onBeforeCompile = (s) => {
-      s.uniforms.darkness = this.depth.userData.darkness;
-      s.fragmentShader = 'uniform float darkness;\n' + s.fragmentShader.replace(
+      s.fragmentShader = s.fragmentShader.replace(
         'gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );',
-        'gl_FragColor = vec4( vec3( 0.0 ), pow( 1.0 - fragCoordZ, 1.6 ) * darkness );');
+        'gl_FragColor = vec4( vec3( 0.0 ), pow( 1.0 - fragCoordZ, 1.6 ) * 1.4 );');
     };
     this.depth.side = THREE.DoubleSide;
     this.blur = new THREE.ShaderMaterial({ ...BLUR, uniforms: THREE.UniformsUtils.clone(BLUR.uniforms), depthTest: false, depthWrite: false });

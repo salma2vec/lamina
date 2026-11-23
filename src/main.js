@@ -41,6 +41,8 @@ if (glOK) {
   modes.cane = new CaneMode(stage);
   modes.pattern = new PatternMode(stage);
   for (const [k, m] of Object.entries(modes)) stage.add(k, m);
+  // A still has no interface around the object, so the object can fill more of the frame.
+  if (still) for (const m of Object.values(modes)) m.margin = (m.margin || 1.18) * 0.9;
 } else {
   body.classList.add('no-gl');
   $('#gl').hidden = true;

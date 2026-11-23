@@ -57,16 +57,16 @@ export function studioMatcap(size = 256) {
  */
 export function clayMaterial(opt = {}, sheen = 0.06) {
   const m = new THREE.MeshMatcapMaterial({ matcap: studioMatcap(), ...opt });
+  // The sheen strength is written into the shader text, so materials with the same
+  // strength share a program and never depend on another material's uniforms.
+  const k = sheen.toFixed(3);
   m.onBeforeCompile = (shader) => {
-    shader.uniforms.uSheen = { value: sheen };
-    shader.fragmentShader = shader.fragmentShader
-      .replace('uniform float opacity;', 'uniform float opacity;\nuniform float uSheen;')
-      .replace('vec3 outgoingLight = diffuseColor.rgb * matcapColor.rgb;',
-        'vec3 outgoingLight = diffuseColor.rgb * matcapColor.rgb;\n' +
-        '\tvec3 sheenH = normalize( vec3( -0.32, 0.42, 1.0 ) );\n' +
-        '\toutgoingLight += uSheen * pow( max( dot( normal, sheenH ), 0.0 ), 22.0 ) * ( 1.0 - 0.6 * diffuseColor.rgb );');
+    shader.fragmentShader = shader.fragmentShader.replace('vec3 outgoingLight = diffuseColor.rgb * matcapColor.rgb;',
+      'vec3 outgoingLight = diffuseColor.rgb * matcapColor.rgb;\n' +
+      '\tvec3 sheenH = normalize( vec3( -0.32, 0.42, 1.0 ) );\n' +
+      `\toutgoingLight += ${k} * pow( max( dot( normal, sheenH ), 0.0 ), 22.0 ) * ( 1.0 - 0.6 * diffuseColor.rgb );`);
   };
-  m.customProgramCacheKey = () => `clay-${sheen}`;
+  m.customProgramCacheKey = () => `clay-${k}`;
   return m;
 }
 

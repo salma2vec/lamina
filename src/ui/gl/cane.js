@@ -169,7 +169,7 @@ export class CaneMode {
     this.group.updateMatrixWorld(true);
     this.box = new THREE.Box3().setFromObject(this.group);
     const c = this.box.getCenter(new THREE.Vector3()), sz = this.box.getSize(new THREE.Vector3());
-    this.shadow.place(c.x, c.y, zBottom, sz.x * 1.9, sz.y * 1.6, Math.max(sz.z, D) * 1.2, 0.72);
+    this.shadow.place(c.x, c.y, zBottom, sz.x * 1.9, sz.y * 1.6, Math.max(sz.z, D) * 1.2, 0.85);
     this.shadowDirty = true;
     this.stage.invalidate();
     return true;
