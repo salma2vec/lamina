@@ -1,9 +1,9 @@
 /* Offline support: network first, falling back to the cache. Same-origin only. */
-const CACHE = 'lamina-0.1.0';
+const CACHE = 'lamina-0.1.0-studio';
 const CORE = [
   './', 'index.html', 'styles/app.css', 'styles/print.css', 'assets/favicon.svg', 'src/main.js',
   'vendor/three/three.module.js', 'vendor/three/three.core.js', 'vendor/three/addons/OrbitControls.js', 'vendor/utif/utif.js',
-  'workers/synthetic-worker.js', 'workers/volume-worker.js',
+  'workers/synthetic-worker.js', 'workers/volume-worker.js', 'workers/surface-worker.js',
 ];
 
 self.addEventListener('install', (e) => {

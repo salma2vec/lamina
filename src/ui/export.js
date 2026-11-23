@@ -43,7 +43,7 @@ export function metadata(app) {
   const rows = [{ label: 'Source', value: `${s.name}${s.synthetic ? ' (synthetic study volume)' : ''}` }];
   if (s.kind !== 'image') {
     rows.push({ label: 'Plane', value: `${p.plane.axis.toUpperCase()}, offset ${fx(p.plane.offset, 2)} ${app.unit}, tilt A ${fx(p.plane.tiltA, 1)}°, tilt B ${fx(p.plane.tiltB, 1)}°` });
-    if (s.kind === 'volume') rows.push({ label: 'Slab', value: `${p.slab.n} voxel${p.slab.n > 1 ? 's' : ''}, ${p.slab.mode === 'max' ? 'maximum' : 'average'}` });
+    if (s.kind === 'volume') rows.push({ label: 'Thickness', value: `${p.slab.n} voxel${p.slab.n > 1 ? 's' : ''}, ${p.slab.mode === 'max' ? 'maximum' : 'average'}` });
   }
   rows.push({ label: 'Section', value: `zoom ${fx(p.outline.zoom, 2)}, rotation ${fx(p.outline.rotation, 0)}°, offset ${fx(p.outline.ox, 1)}, ${fx(p.outline.oy, 1)} ${app.unit}` });
   rows.push({ label: 'Levels', value: `${p.levels}; thresholds ${p.thresholds.map((t) => t.toFixed(3)).join(', ')}` });
