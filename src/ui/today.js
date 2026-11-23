@@ -1,5 +1,5 @@
 /** Today: a date-seeded study with a timer, in the spirit of a daily drawing practice. */
-import { $, $$, fx } from './dom.js';
+import { $, $$, el } from './dom.js';
 import { localDateString, hashSeed, pickStudy } from '../daily.js';
 import { syntheticVolume } from './loader.js';
 import { planeFrame, planeBoxHalfExtent } from '../geom/plane.js';
@@ -13,7 +13,20 @@ import { PRESETS, defaultMapping } from '../cane/palette.js';
 import { defaultParams } from '../state.js';
 
 const G = 400;
-const WORDS = ['', '', 'two', 'three', 'four', 'five', 'six'];
+
+/** Draw RGBA pixels (G x G) into a canvas at its displayed size. */
+function paint(canvas, rgba) {
+  const r = canvas.getBoundingClientRect();
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const s = Math.max(64, Math.round(Math.min(r.width || G, r.height || G) * dpr));
+  canvas.width = canvas.height = s;
+  const src = document.createElement('canvas');
+  src.width = src.height = G;
+  src.getContext('2d').putImageData(new ImageData(rgba, G, G), 0, 0);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, 0, 0, s, s);
+}
 
 export class Today {
   /**
@@ -30,12 +43,18 @@ export class Today {
     this.timer = 0;
     this.pick = null;
     this.revealed = false;
+    this.chimeOn = false;
     $$('#duration-seg button').forEach((b) => b.addEventListener('click', () => this.setDuration(+b.dataset.min)));
     $('#timer-start').addEventListener('click', () => this.toggle());
     $('#timer-reset').addEventListener('click', () => this.reset());
     $('#today-reveal').addEventListener('click', () => this.reveal(!this.revealed));
     $('#today-random').addEventListener('click', () => this.load(pickStudy((Math.random() * 2 ** 32) >>> 0), false));
     $('#today-open').addEventListener('click', () => { if (this.pick) { this.close(); this.openInEditor(this.pick); } });
+    $('#timer-chime').addEventListener('click', () => {
+      this.chimeOn = !this.chimeOn;
+      $('#timer-chime').setAttribute('aria-pressed', String(this.chimeOn));
+    });
+    new ResizeObserver(() => this.isOpen && this.repaint()).observe($('#today-figure'));
     this.setDuration(10);
   }
 
@@ -44,8 +63,8 @@ export class Today {
   open() {
     this.root.hidden = false;
     const date = localDateString();
-    $('#today-date').textContent = date;
     if (!this.pick || this.pick.date !== date) this.load({ ...pickStudy(hashSeed(date)), date }, true);
+    else this.repaint();
   }
 
   close() {
@@ -57,13 +76,13 @@ export class Today {
 
   async load(pick, daily) {
     this.pick = pick;
+    this.daily = daily;
     this.reveal(false);
-    $('#today-title').textContent = pick.spec.name;
-    $('#today-desc').textContent = pick.spec.description;
-    $('#today-date').textContent = daily ? localDateString() : 'Random study';
-    $('#today-levels').textContent = WORDS[pick.spec.levels] || 'three';
-    const pl = pick.plane;
-    $('#today-plane').textContent = `${pl.axis.toUpperCase()}  offset ${fx(pl.offset, 1)} vox  tilt ${pl.tiltA}° / ${pl.tiltB}°  rotation ${pick.crop.rotation}°`;
+    const words = ['', '', 'two', 'three', 'four', 'five', 'six'];
+    $('#today-title').replaceChildren(
+      el('span', { text: `${pick.spec.name} — ${words[pick.spec.levels] || 'three'} clays` }),
+      el('span', { class: 'date', text: daily ? localDateString() : 'random study' }),
+    );
     let vol;
     try {
       vol = await syntheticVolume(pick.id, 1);
@@ -73,39 +92,37 @@ export class Today {
       vol = await syntheticVolume(pick.id, 1);
     }
     if (this.pick !== pick) return;
+    const pl = pick.plane;
     const frame = planeFrame(pl);
     const half = planeBoxHalfExtent([128, 128, 128], frame) || 64;
     const n = 320;
     const data = sliceVolume(vol, frame, { n, px: (2 * half) / n });
-    const values = cropSlice({ data, w: n, h: n, px: (2 * half) / n }, G, pick.crop, 128);
-    this.values = values;
+    this.values = cropSlice({ data, w: n, h: n, px: (2 * half) / n }, G, pick.crop, 128);
     this.mask = outlineMask('circle', G);
-    this.drawSlice();
     this.cane = null;
-  }
-
-  drawSlice() {
-    const c = $('#today-slice');
-    c.width = c.height = G;
-    const ctx = c.getContext('2d');
-    const img = ctx.createImageData(G, G);
+    this.sliceRGBA = new Uint8ClampedArray(G * G * 4);
     for (let i = 0; i < G * G; i++) {
       const g = Math.max(0, Math.min(255, this.values[i] * 255));
-      img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = g;
+      const o = i * 4;
+      this.sliceRGBA[o] = this.sliceRGBA[o + 1] = this.sliceRGBA[o + 2] = g;
       // Anti-aliased disc edge.
       const x = (i % G) + 0.5 - G / 2, y = Math.floor(i / G) + 0.5 - G / 2;
-      img.data[i * 4 + 3] = Math.max(0, Math.min(1, G / 2 - Math.hypot(x, y))) * 255;
+      this.sliceRGBA[o + 3] = Math.max(0, Math.min(1, G / 2 - Math.hypot(x, y))) * 255;
     }
-    ctx.putImageData(img, 0, 0);
+    this.repaint();
+  }
+
+  repaint() {
+    if (this.sliceRGBA) paint($('#today-slice'), this.sliceRGBA);
+    if (this.revealed && this.cane) paint($('#today-cane'), this.cane.data);
   }
 
   reveal(on) {
     this.revealed = on;
-    const c = $('#today-cane');
     $('#today-reveal').textContent = on ? 'Hide' : 'Reveal';
-    c.hidden = !on;
-    $('.today-canvases').classList.toggle('both', on);
-    if (!on || !this.values) return;
+    $('#today-cane').hidden = !on;
+    $('#today-figure').classList.toggle('both', on);
+    if (!on || !this.values) { this.repaint(); return; }
     if (!this.cane) {
       const levels = this.pick.spec.levels;
       const t = initialThresholds(histogram(this.values, this.mask), levels);
@@ -116,8 +133,7 @@ export class Today {
       const cols = defaultMapping(levels, sw).map((i) => sw[i].colour);
       this.cane = renderCane(l, G, G, cols, { scale: 1 });
     }
-    c.width = this.cane.width; c.height = this.cane.height;
-    c.getContext('2d').putImageData(new ImageData(this.cane.data, this.cane.width, this.cane.height), 0, 0);
+    this.repaint();
   }
 
   setDuration(min) {
@@ -146,7 +162,7 @@ export class Today {
   reset() {
     this.pause();
     this.remaining = this.minutes * 60000;
-    this.paint();
+    this.paintTimer();
   }
 
   tick() {
@@ -156,13 +172,13 @@ export class Today {
     if (this.remaining <= 0) {
       this.remaining = 0;
       this.pause();
-      if ($('#timer-chime').checked) this.chime();
+      if (this.chimeOn) this.chime();
       this.toast('Time. Put the pencil down.');
     }
-    this.paint();
+    this.paintTimer();
   }
 
-  paint() {
+  paintTimer() {
     const s = Math.ceil(this.remaining / 1000);
     $('#timer').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
     $('#timer-progress').style.width = `${(1 - this.remaining / (this.minutes * 60000)) * 100}%`;

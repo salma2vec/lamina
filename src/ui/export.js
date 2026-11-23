@@ -5,8 +5,7 @@ import { caneSVG } from '../sheet/svg.js';
 import { printSheetHTML } from '../sheet/print.js';
 import { renderCane } from '../cane/render.js';
 import { toSession } from '../state.js';
-import { drawTiles } from './view-pattern.js';
-import { outlineHeight, outlinePolygon } from '../cane/outline.js';
+import { drawPattern } from './pattern-texture.js';
 
 function ready(app) {
   if (!app.source || !app.d.labels || !app.d.sheet) throw new Error('Load a source first.');
@@ -47,7 +46,7 @@ const toBlob = (canvas) => new Promise((res, rej) => canvas.toBlob((b) => (b ? r
  * Run an export action.
  * @param {string} kind
  * @param {import('./app.js').App} app
- * @param {Object} ctx { patternCanvas, pickSession }
+ * @param {Object} ctx { pickSession }
  */
 export async function runExport(kind, app, ctx) {
   const base = slug(title(app));
@@ -74,11 +73,7 @@ export async function runExport(kind, app, ctx) {
     return 'Cane PNG saved.';
   }
   if (kind === 'png-pattern') {
-    const p = app.params;
-    const c = document.createElement('canvas');
-    c.width = 2400; c.height = 1600;
-    const pat = { ...p.pattern };
-    drawTiles(c.getContext('2d'), app.caneCanvas, c.width, c.height, pat, outlineHeight(p.outline.shape, p.outline.aspect), ctx.ground(), outlinePolygon(p.outline.shape, p.outline.aspect));
+    const c = drawPattern(app, document.createElement('canvas'), 2400, 1600);
     download(await toBlob(c), `${base}-pattern.png`);
     return 'Pattern PNG saved.';
   }

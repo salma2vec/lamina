@@ -25,10 +25,15 @@ export class Histogram {
       this.drag = best;
       this.active = best;
       canvas.setPointerCapture(e.pointerId);
+      this.app.interactive = true;
       this.move(x);
     });
     canvas.addEventListener('pointermove', (e) => { if (this.drag >= 0) this.move(pos(e)); });
-    const end = () => { this.drag = -1; };
+    const end = () => {
+      if (this.drag < 0) return;
+      this.drag = -1;
+      this.app.settle();
+    };
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
   }
@@ -65,7 +70,7 @@ export class Histogram {
     const { ctx, w, h } = fitCanvas(this.canvas);
     ctx.clearRect(0, 0, w, h);
     const app = this.app, c = app.d.crop;
-    const ink3 = cssVar('--ink-3'), accent = cssVar('--accent-ink'), rule = cssVar('--rule-2');
+    const ink3 = cssVar('--ink-3'), accent = cssVar('--accent-ink'), rule = cssVar('--line-3');
     const L = 4, R = w - 4, band = 10, base = h - band - 4;
     ctx.fillStyle = rule;
     ctx.fillRect(L, base, R - L, 1);

@@ -1,5 +1,7 @@
 /** Keyboard shortcuts. */
 
+const KEYS = { r: 'random', s: 'save', e: 'export', '?': 'help', t: 'today', v: 'flat', f: 'frame' };
+
 /**
  * Install global key handling.
  * @param {Object<string, (e:KeyboardEvent)=>void>} actions keyed by action name
@@ -8,19 +10,20 @@ export function installShortcuts(actions) {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { actions.escape(e); return; }
     const t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) {
-      if (!(t.type === 'range' && /^[1-4gGrRsSeE?tT[\]]$/.test(e.key))) return;
-    }
+    const typing = t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+    // Letter and number keys still work from a range slider, which takes no text.
+    if (typing && !(t.type === 'range' && /^[1-3vVfFrRsSeE?tT[\]]$/.test(e.key))) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key;
     let name = null;
-    if (k >= '1' && k <= '4') name = 'view';
+    if (k >= '1' && k <= '3') name = 'mode';
     else if (k === 'ArrowUp' || k === 'ArrowDown') name = 'offset';
     else if (k === 'ArrowLeft' || k === 'ArrowRight') name = 'tilt';
     else if (k === '[' || k === ']') name = 'bracket';
-    else name = { r: 'random', R: 'random', s: 'save', S: 'save', e: 'export', E: 'export', '?': 'help', g: 'split', G: 'split', t: 'today', T: 'today' }[k];
+    else name = KEYS[k.toLowerCase()] || KEYS[k];
     if (!name || !actions[name]) return;
-    if (t && t.type === 'range' && (name === 'offset' || name === 'tilt')) return;
+    // Arrow keys on a range slider move that slider.
+    if ((name === 'offset' || name === 'tilt') && t && t.type === 'range') return;
     e.preventDefault();
     actions[name](e);
   });

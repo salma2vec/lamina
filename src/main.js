@@ -1,85 +1,167 @@
 /** Lamina entry point: builds the interface and wires it to the app state. */
+import * as THREE from 'three';
 import { App } from './ui/app.js';
-import { $, $$, el } from './ui/dom.js';
-import { bindControls } from './ui/bind.js';
-import { View3D } from './ui/view3d.js';
-import { SliceView } from './ui/view-slice.js';
-import { CaneView } from './ui/view-cane.js';
-import { PatternView } from './ui/view-pattern.js';
+import { $, $$, el, fx } from './ui/dom.js';
+import { bindControls, formatOut } from './ui/bind.js';
+import { icon } from './ui/icons.js';
+import { Stage, webglAvailable } from './ui/gl/stage.js';
+import { SectionMode } from './ui/gl/section.js';
+import { CaneMode } from './ui/gl/cane.js';
+import { PatternMode } from './ui/gl/pattern.js';
+import { FlatView } from './ui/flat.js';
 import { Histogram } from './ui/histogram.js';
-import { renderLevels, renderPresets, renderSwatches, renderSheet, renderFacts } from './ui/panels.js';
-import { loadFiles, syntheticVolume, cancelLoad } from './ui/loader.js';
+import { Panels, installTips } from './ui/popover.js';
+import { VSlider } from './ui/vslider.js';
+import { renderLevels, renderPresets, renderSwatches, renderSheet, renderFacts, renderChips } from './ui/panels.js';
+import { loadFiles, syntheticVolume, cancelLoad, runJob } from './ui/loader.js';
 import { runExport } from './ui/export.js';
 import { Today } from './ui/today.js';
 import { installShortcuts } from './ui/shortcuts.js';
 import { SPECIMENS } from './volume/synthetic.js';
+import { otsuLevel } from './volume/isosurface.js';
 import { SHAPES, outlinePolygon } from './cane/outline.js';
 import { LAYOUTS, ALTERNATIONS } from './pattern/tile.js';
 import { PRESETS, defaultMapping } from './cane/palette.js';
 import { fromSession } from './state.js';
 
+const query = new URLSearchParams(location.search);
+const still = ['section', 'cane', 'pattern'].includes(query.get('still')) ? query.get('still') : null;
+const body = document.body;
+if (still) body.classList.add('still');
+
+for (const b of $$('[data-icon]')) b.innerHTML = icon(b.dataset.icon);
+
 const app = new App();
-const views = {
-  '3d': new View3D($('#gl'), app),
-  slice: new SliceView($('#slice-canvas'), $('#cap-slice'), app),
-  cane: new CaneView($('#cane-canvas'), $('#cap-cane'), app),
-  pattern: new PatternView($('#pattern-canvas'), $('#cap-pattern'), app),
-};
+const glOK = webglAvailable();
+let stage = null;
+const modes = {};
+if (glOK) {
+  stage = new Stage($('#gl'), $('#stage'));
+  modes.section = new SectionMode(stage);
+  modes.cane = new CaneMode(stage);
+  modes.pattern = new PatternMode(stage);
+  for (const [k, m] of Object.entries(modes)) stage.add(k, m);
+} else {
+  body.classList.add('no-gl');
+  $('#gl').hidden = true;
+}
+const flat = new FlatView($('#flat'), app);
 const hist = new Histogram($('#hist'), app);
-let current = 'cane';
-let split = false;
+const panels = new Panels();
+installTips($('#tip'));
 
-/* ---------- Status, errors, toast ---------- */
+/** Short lines for the study volume list; the full description is the tooltip. */
+const SHORT = {
+  osteon: 'Haversian canals in concentric lamellae',
+  ammonite: 'Log-spiral shell with frilled septa',
+  stromatolite: 'Domed microbial laminae in columns',
+  wood: 'Growth rings, cell files and rays',
+  frond: 'Ediacaran fractal branching',
+};
+/** Surface levels that show each study volume as a solid form. */
+const ISO = { osteon: 0.18, ammonite: 0.3, stromatolite: 0.3, wood: 0.1, frond: 0.4 };
 
-let toastTimer = 0;
-function toast(msg) {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+let mode = 'cane';
+let flatOn = !glOK;
+/** What changed since a view last drew it. */
+const dirty = { section: true, crop: true, cane: true, pattern: true, sheet: true };
+
+/* ---------- Status line ---------- */
+
+const status = { kind: null, timer: 0 };
+/**
+ * Show one quiet line at the bottom left.
+ * @param {string|null} text
+ * @param {{kind?:'progress'|'error'|'note'|'toast', p?:number, action?:string, onAction?:()=>void}} [o]
+ */
+function say(text, o = {}) {
+  const kind = o.kind || 'toast';
+  clearTimeout(status.timer);
+  const st = $('#status');
+  if (!text) { st.hidden = true; status.kind = null; return; }
+  status.kind = kind;
+  st.hidden = false;
+  st.classList.toggle('error', kind === 'error');
+  $('#status-text').textContent = text;
+  const act = $('#status-action');
+  act.hidden = !o.action;
+  act.textContent = o.action || '';
+  act.onclick = o.onAction || null;
+  $('#progress').hidden = kind !== 'progress';
+  if (kind === 'progress') $('#progress-bar').style.width = `${Math.round((o.p || 0) * 100)}%`;
+  if (kind === 'toast') status.timer = setTimeout(() => say(null), 2600);
 }
-function showError(msg) {
-  const e = $('#error');
-  e.textContent = msg;
-  e.hidden = !msg;
-}
-function showNote(msg) {
-  const n = $('#source-note');
-  n.textContent = msg;
-  n.hidden = !msg;
-}
+const toast = (msg) => say(msg, { kind: 'toast' });
+const dismiss = { action: 'Dismiss', onAction: () => say(null) };
+function showError(msg) { if (msg) say(msg, { kind: 'error', ...dismiss }); else if (status.kind === 'error') say(null); }
+function showNote(msg) { if (msg) say(msg, { kind: 'note', ...dismiss }); else if (status.kind === 'note') say(null); }
 function progress(p, label) {
-  $('#status').hidden = p === null;
-  if (p === null) return;
-  $('#status-text').textContent = label || 'Loading';
-  $('#progress-bar').style.width = `${Math.round(p * 100)}%`;
+  if (p === null) { if (status.kind === 'progress') say(null); return; }
+  say(label || 'Loading', { kind: 'progress', p, action: 'Cancel', onAction: () => cancelLoad() });
 }
 
-/* ---------- Views ---------- */
+/* ---------- Modes and views ---------- */
 
-function isVisible(v) { return split || current === v; }
+const usingFlat = () => !glOK || (flatOn && mode !== 'pattern');
 
-function setView(v) {
-  current = v;
-  $$('.tabs [role="tab"]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === v)));
-  $$('.view').forEach((s) => s.classList.toggle('active', s.dataset.view === v));
-  refreshVisibility();
+function setMode(m) {
+  mode = m;
+  for (const k of ['section', 'cane', 'pattern']) body.classList.toggle(`mode-${k}`, k === m);
+  $$('.modes [role="tab"]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
+  app.setHorizon(m === 'section' ? 'crop' : m === 'cane' ? 'sheet' : 'pattern');
+  refreshView(true);
 }
 
-function refreshVisibility() {
-  $('#views').classList.toggle('split', split);
-  document.body.classList.toggle('is-split', split);
-  $('#split-toggle').setAttribute('aria-pressed', String(split));
-  for (const [k, view] of Object.entries(views)) {
-    const vis = isVisible(k);
-    if (k === '3d') view.setVisible(vis);
-    else { view.visible = vis; if (vis) view.draw(); }
+function refreshView(modeChanged = false) {
+  const f = usingFlat();
+  $('#flat').hidden = !f;
+  if (glOK) {
+    $('#gl').hidden = f;
+    stage.active = !f;
   }
+  flat.mode = mode;
+  flat.visible = f;
+  const t = $('#flat-toggle');
+  t.setAttribute('aria-pressed', String(flatOn));
+  t.innerHTML = icon(flatOn ? 'cube' : 'flat');
+  t.dataset.tip = flatOn ? '3D view' : 'Flat view';
+  if (f) { flat.draw(); return; }
+  if (modeChanged) stage.show(mode);
+  applyVisible();
 }
 
-$$('.tabs [role="tab"]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
-$('#split-toggle').addEventListener('click', () => { split = !split; refreshVisibility(); });
+/** Bring the visible view up to date with the pipeline. */
+function applyVisible() {
+  if (!app.source) return;
+  if (usingFlat()) {
+    const need = mode === 'section' ? dirty.section || dirty.crop : mode === 'cane' ? dirty.cane : dirty.pattern;
+    if (need) flat.draw();
+    if (mode === 'section') dirty.section = dirty.crop = false;
+    else if (mode === 'cane') dirty.cane = false;
+    else dirty.pattern = false;
+    return;
+  }
+  const m = modes[mode];
+  let reframe = false;
+  if (mode === 'section') {
+    if (dirty.section) modes.section.updateSlice(app, iso);
+    else if (dirty.crop) modes.section.updateCrop(app);
+    dirty.section = dirty.crop = false;
+  } else if (mode === 'cane' && dirty.cane && app.d.caneImage) {
+    reframe = modes.cane.build(app);
+    modes.cane.updateTexture(app);
+    dirty.cane = false;
+  } else if (mode === 'pattern' && dirty.pattern && app.d.labels) {
+    reframe = modes.pattern.setForm(app.params.pattern.preview);
+    modes.pattern.updateTexture(app);
+    dirty.pattern = false;
+  }
+  if (reframe && !m.userMoved) stage.frame(false);
+  if (still) markStill();
+}
+
+$$('.modes [role="tab"]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+$('#flat-toggle').addEventListener('click', () => { flatOn = !flatOn; refreshView(true); });
 
 /* ---------- Controls ---------- */
 
@@ -91,25 +173,61 @@ function segment(sel, attr, get, set) {
   return () => buttons.forEach((b) => b.setAttribute('aria-checked', String(String(get()) === b.dataset[attr])));
 }
 
+// Outline shapes and pattern layouts as small drawings.
+for (const s of SHAPES) {
+  const pts = outlinePolygon(s.id, 0.6).map(([x, y]) => `${(x * 14 + 10).toFixed(2)},${(10 - y * 14).toFixed(2)}`).join(' ');
+  const b = el('button', { 'data-shape': s.id, role: 'radio', title: s.name, 'aria-label': s.name });
+  b.innerHTML = `<svg class="i" viewBox="0 0 20 20" aria-hidden="true"><polygon points="${pts}"/></svg>`;
+  $('#shape-seg').append(b);
+}
+const LAYOUT_ICON = { grid: 'grid', brick: 'brick', hex: 'hex', mirror: 'mirror', radial: 'radial' };
+for (const l of LAYOUTS) {
+  const b = el('button', { 'data-layout': l.id, role: 'radio', title: l.name, 'aria-label': l.name });
+  b.innerHTML = icon(LAYOUT_ICON[l.id] || 'grid');
+  $('#layout-seg').append(b);
+}
+$('#preview-seg [data-preview="slab"]').innerHTML = icon('slab');
+$('#preview-seg [data-preview="vessel"]').innerHTML = icon('bowl');
+$('#pattern-alt').append(...ALTERNATIONS.map((l) => el('option', { value: l.id, text: l.name })));
+
 const segSyncs = [
-  segment('#axis-seg', 'axis', () => app.params.plane.axis, (v) => { app.params.plane.axis = v; app.params.plane.offset = 0; app.changed('plane.axis'); }),
+  segment('#axis-seg', 'axis', () => app.params.plane.axis, (v) => { app.params.plane.axis = v; app.params.plane.offset = 0; app.changed('plane.axis'); reframeSection(); }),
   segment('#slab-seg', 'slab', () => app.params.slab.mode, (v) => { app.params.slab.mode = v; app.changed('slab.mode'); }),
-  segment('#levels-seg', 'levels', () => app.params.levels, (v) => { app.params.levels = +v; app.changed('levels'); }),
+  segment('#levels-seg', 'levels', () => app.params.levels, (v) => setLevels(+v)),
   segment('#preview-seg', 'preview', () => app.params.pattern.preview, (v) => { app.params.pattern.preview = v; app.changed('pattern.preview'); }),
+  segment('#shape-seg', 'shape', () => app.params.outline.shape, (v) => { app.params.outline.shape = v; app.changed('outline.shape'); }),
+  segment('#layout-seg', 'layout', () => app.params.pattern.layout, (v) => { app.params.pattern.layout = v; app.changed('pattern.layout'); }),
 ];
 
-// Outline shape buttons with small line drawings.
-const shapeSeg = $('#shape-seg');
-for (const s of SHAPES) {
-  const pts = outlinePolygon(s.id, 0.6).map(([x, y]) => `${(x * 16 + 9).toFixed(2)},${(9 - y * 16).toFixed(2)}`).join(' ');
-  const b = el('button', { 'data-shape': s.id, role: 'radio', title: s.name, 'aria-label': s.name });
-  b.innerHTML = `<svg viewBox="0 0 18 18" aria-hidden="true"><polygon points="${pts}"/></svg>`;
-  shapeSeg.append(b);
+function setLevels(n) {
+  n = Math.max(2, Math.min(6, n));
+  if (n === app.params.levels) return;
+  app.params.levels = n;
+  app.changed('levels');
+  syncAll();
 }
-segSyncs.push(segment('#shape-seg', 'shape', () => app.params.outline.shape, (v) => { app.params.outline.shape = v; app.changed('outline.shape'); }));
 
-$('#pattern-layout').append(...LAYOUTS.map((l) => el('option', { value: l.id, text: l.name })));
-$('#pattern-alt').append(...ALTERNATIONS.map((l) => el('option', { value: l.id, text: l.name })));
+/** A new axis faces another way: turn the camera to it unless the view was moved by hand. */
+function reframeSection() {
+  if (!glOK) return;
+  dirty.section = true;
+  requestAnimationFrame(() => { if (mode === 'section' && !modes.section.userMoved) stage.frame(false); });
+}
+
+// Range sliders: while one is dragged, clean-up runs a lighter pass.
+for (const r of $$('input[type="range"]')) {
+  r.addEventListener('pointerdown', () => { app.interactive = true; });
+  r.addEventListener('change', () => app.settle());
+}
+
+const offsetSlider = new VSlider($('#offset-slider'), {
+  get: () => app.params.plane.offset,
+  set: (v) => { app.params.plane.offset = v; app.changed('plane.offset'); syncAll(); },
+  range: () => app.offsetRange(),
+  format: (v) => formatOut(v, 'len', app.unit),
+  start: () => { app.interactive = true; },
+  end: () => app.settle(),
+});
 
 function syncRanges() {
   const r = app.offsetRange();
@@ -128,15 +246,15 @@ function syncAll() {
   syncRanges();
   sync();
   segSyncs.forEach((f) => f());
-  document.body.classList.toggle('not-loaf', app.params.outline.shape !== 'rectangle');
+  offsetSlider.sync();
+  body.classList.toggle('not-loaf', app.params.outline.shape !== 'rectangle');
 }
 
 app.on('params', syncAll);
 
 $('#auto-thresholds').addEventListener('click', () => { app.autoThresholds = true; app.changed('levels'); });
 $('#invert-mapping').addEventListener('click', () => {
-  const m = app.params.mapping;
-  app.params.mapping = m.slice().reverse();
+  app.params.mapping = app.params.mapping.slice().reverse();
   app.changed('mapping');
 });
 $('#random-plane').addEventListener('click', randomPlane);
@@ -156,7 +274,49 @@ function randomPlane() {
   p.offset = Math.round((Math.random() - 0.5) * app.offsetRange() * 0.8 * 10) / 10;
   app.changed('plane.offset');
   syncAll();
+  reframeSection();
 }
+
+/* ---------- 3D surface of volumes ---------- */
+
+let iso = 0.5;
+let surfaceSeq = 0;
+let surfaceKey = '';
+let isoTimer = 0;
+
+function setIso(v, label = true) {
+  iso = Math.min(0.98, Math.max(0.02, v));
+  $('#iso-level').value = iso;
+  if (label) $('#iso-out').textContent = fx(iso, 2);
+}
+
+/**
+ * Ask the worker for the surface of the current volume at the current level.
+ * @param {boolean} sendVolume the worker does not have this volume yet
+ */
+function requestSurface(sendVolume) {
+  const s = app.source;
+  if (!glOK || !s || s.kind !== 'volume') return;
+  const seq = ++surfaceSeq;
+  const v = s.volume;
+  const msg = { key: surfaceKey, level: iso };
+  if (sendVolume) msg.volume = { dims: v.dims, spacing: v.spacing, data: v.data, scale: v.scale };
+  runJob('surface-worker', msg).then((r) => {
+    if (seq !== surfaceSeq || app.source !== s) return;
+    modes.section.setSurface(r);
+    dirty.section = true;
+    if (mode === 'section' && !usingFlat()) applyVisible();
+  }).catch((err) => { if (seq === surfaceSeq) showError(err.message); });
+}
+
+$('#iso-level').addEventListener('input', (e) => {
+  setIso(parseFloat(e.target.value));
+  dirty.section = true;
+  if (mode === 'section') applyVisible();
+  clearTimeout(isoTimer);
+  isoTimer = setTimeout(() => requestSurface(false), 220);
+});
+$('#iso-level').addEventListener('change', () => { clearTimeout(isoTimer); requestSurface(false); });
 
 /* ---------- Palette ---------- */
 
@@ -178,6 +338,7 @@ const drawPresets = () => renderPresets($('#palette-presets'), app, customPalett
 function drawPalette() {
   drawPresets();
   renderSwatches($('#swatch-list'), $('#add-swatch'), app);
+  panels.place();
 }
 $('#add-swatch').addEventListener('click', () => {
   const sw = app.params.palette.swatches;
@@ -187,16 +348,29 @@ $('#add-swatch').addEventListener('click', () => {
   drawPalette();
 });
 app.on('palette', drawPalette);
-// Edits in the swatch list: refresh the preset list only, so the field being typed in keeps focus.
+// Edits in the clay list: refresh the preset list only, so the field being typed in keeps focus.
 app.on('palette-light', drawPresets);
+
+const drawChips = () => renderChips($('#chips'), app, { open: (a) => panels.toggle('clays', a), step: (d) => setLevels(app.params.levels + d) });
+
+/* ---------- Panels ---------- */
+
+$$('[data-panel]').forEach((b) => b.addEventListener('click', () => panels.toggle(b.dataset.panel, b)));
+panels.onChange = (id) => {
+  if (id === 'clays') { renderLevels($('#level-list'), app); drawPalette(); if ($('#adjust').open) hist.draw(); }
+  if (id === 'build') renderSheet($('#sheet'), app);
+  if (id === 'specimen') renderFacts($('#source-facts'), app);
+  panels.place();
+};
+$('#adjust').addEventListener('toggle', () => { if ($('#adjust').open) hist.draw(); panels.place(); });
+for (const d of $$('.panel details')) d.addEventListener('toggle', () => panels.place());
 
 /* ---------- Source ---------- */
 
-const specimenList = $('#specimen-list');
 for (const s of SPECIMENS) {
-  const b = el('button', { 'data-id': s.id }, [el('b', { text: s.name }), el('span', { text: s.description })]);
-  b.addEventListener('click', () => loadSynthetic(s.id));
-  specimenList.append(el('li', {}, [b]));
+  const b = el('button', { 'data-id': s.id, title: s.description }, [el('span', { class: 'name', text: s.name }), el('span', { class: 'desc', text: SHORT[s.id] || '' })]);
+  b.addEventListener('click', () => { loadSynthetic(s.id); panels.close(false); });
+  $('#specimen-list').append(el('li', {}, [b]));
 }
 
 /* Each load gets a number. A load that a newer one replaced is cancelled, and its result is ignored. */
@@ -263,20 +437,18 @@ async function handleFiles(files) {
   }
 }
 
-$('#cancel-load').addEventListener('click', () => cancelLoad());
-
+$('#tb-open').addEventListener('click', () => $('#file-input').click());
 $('#file-input').addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
-const drop = $('#drop');
 let dragDepth = 0;
-window.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); });
-window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
-window.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+window.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $('#drop-veil').hidden = false; });
+window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('#drop-veil').hidden = true; } });
+window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
 window.addEventListener('drop', (e) => {
   e.preventDefault();
   dragDepth = 0;
-  document.body.classList.remove('dragging');
-  drop.classList.remove('over');
-  handleFiles(e.dataTransfer.files);
+  $('#drop-veil').hidden = true;
+  if (!today.isOpen) handleFiles(e.dataTransfer.files);
 });
 
 $('#scale-input').addEventListener('change', (e) => {
@@ -284,25 +456,104 @@ $('#scale-input').addEventListener('change', (e) => {
   if (v > 0) app.setScale(v);
 });
 
+function caption(s) {
+  if (!s) return ['', ''];
+  if (s.synthetic) return [s.name, ' — synthetic study volume'];
+  if (s.kind === 'mesh') return [s.name, ` — mesh, ${s.mesh.triangles.toLocaleString('en')} triangles`];
+  if (s.kind === 'volume') return [s.name, ` — volume, ${s.volume.dims.join(' × ')}`];
+  return [s.name, ' — image'];
+}
+
+let lastSource = null;
 app.on('source', (s) => {
-  $('#specimen-title').textContent = s ? s.name : 'No source';
-  $('#specimen-tag').hidden = !(s && s.synthetic);
+  const [name, sub] = caption(s);
+  $('#caption-name').textContent = name;
+  $('#caption-sub').textContent = sub;
   $$('#specimen-list button').forEach((b) => b.classList.toggle('on', !!(s && s.synthetic && s.synthetic.id === b.dataset.id)));
-  document.body.classList.toggle('no-volume', !s || s.kind !== 'volume');
-  document.body.classList.toggle('no-plane', !s || s.kind === 'image');
-  // A single image has no plane to move: keep its dimmed controls out of the tab order too.
-  $('#plane-panel').inert = !s || s.kind === 'image';
-  $('#empty').hidden = !!s;
+  body.classList.toggle('no-source', !s);
+  body.classList.toggle('no-volume', !s || s.kind !== 'volume');
+  body.classList.toggle('no-plane', !s || s.kind === 'image');
+  $('#plane-controls').hidden = !!(s && s.kind === 'image');
+  $('#plane-none').hidden = !(s && s.kind === 'image');
   renderFacts($('#source-facts'), app);
   const sf = $('#scale-field');
-  const showScale = s && (!s.synthetic) && (s.kind === 'mesh' || !s.unitKnown || s.userScale);
+  const showScale = s && !s.synthetic && (s.kind === 'mesh' || !s.unitKnown || s.userScale);
   sf.hidden = !showScale;
   if (showScale) {
     $('#scale-label').textContent = s.kind === 'mesh' ? 'Mesh unit' : s.kind === 'image' ? 'Pixel size' : 'Voxel size';
     $('#scale-input').value = s.kind === 'mesh' ? (s.meshScale || 1) : s.unitKnown ? +(s.kind === 'image' ? s.pixelSize / (s.image.factor || 1) : s.volume.spacing[0] / s.volume.factor[0]).toPrecision(6) : '';
   }
-  views['3d'].setSource(s);
+  // The same source with a new scale keeps its view; a new source starts fresh.
+  const fresh = s !== lastSource;
+  lastSource = s;
+  if (glOK) {
+    modes.section.setSource(s);
+    if (fresh) { modes.cane.userMoved = false; modes.pattern.userMoved = false; }
+    if (s && s.kind === 'volume') {
+      if (fresh) setIso(s.synthetic ? ISO[s.synthetic.id] || 0.3 : otsuLevel(s.volume));
+      surfaceKey = `${s.name}:${s.volume.spacing.join(',')}:${Math.random()}`;
+      requestSurface(true);
+    }
+    if (mode === 'section' && !usingFlat()) stage.frame(false);
+  }
+  Object.keys(dirty).forEach((k) => { dirty[k] = true; });
+  panels.place();
 });
+
+/* ---------- Plane dragging in the 3D view ---------- */
+
+if (glOK) {
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  const gl = $('#gl');
+  const hitPlane = (e) => {
+    if (mode !== 'section' || !app.source || app.source.kind === 'image') return null;
+    const r = gl.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, stage.camera);
+    return modes.section.pickPlane(ray);
+  };
+  let drag = null;
+  $('#stage').addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || usingFlat() || e.target !== gl) return;
+    const hit = hitPlane(e);
+    if (!hit) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const R = Math.max(...app.source.size) * 0.1;
+    const n = new THREE.Vector3(...app.frame.n);
+    const r = gl.getBoundingClientRect();
+    const a = hit.point.clone().project(stage.camera), b = hit.point.clone().addScaledVector(n, R).project(stage.camera);
+    let sx = ((b.x - a.x) * r.width) / 2, sy = (-(b.y - a.y) * r.height) / 2;
+    let len = Math.hypot(sx, sy);
+    // Seen almost face-on, the normal has no length on screen: use vertical motion instead.
+    if (len < 14) { sx = 0; sy = -60; len = 60; }
+    drag = { x: e.clientX, y: e.clientY, start: app.params.plane.offset, sx: sx / len, sy: sy / len, k: R / len, id: e.pointerId };
+    gl.setPointerCapture(e.pointerId);
+    gl.classList.add('dragging');
+    app.interactive = true;
+  }, true);
+  gl.addEventListener('pointermove', (e) => {
+    if (drag) {
+      const d = (e.clientX - drag.x) * drag.sx + (e.clientY - drag.y) * drag.sy;
+      const lim = app.offsetRange();
+      app.params.plane.offset = Math.max(-lim, Math.min(lim, drag.start + d * drag.k));
+      app.changed('plane.offset');
+      syncAll();
+      return;
+    }
+    if (e.buttons) return;
+    gl.classList.toggle('on-plane', !!hitPlane(e));
+  });
+  const endDrag = () => {
+    if (!drag) return;
+    drag = null;
+    gl.classList.remove('dragging');
+    app.settle();
+  };
+  gl.addEventListener('pointerup', endDrag);
+  gl.addEventListener('pointercancel', endDrag);
+}
 
 /* ---------- Session ---------- */
 
@@ -318,14 +569,14 @@ function applySession(obj) {
     loadSynthetic(r.source.synthetic.id);
     // loadSynthetic clears pending state; keepParams carries the session into setSource.
   } else {
-    showNote(r.source ? `Session loaded. Load "${r.source.name}" again to restore the slice. Its data is not stored in the session.` : 'Session loaded.');
+    showNote(r.source ? `Session loaded. Open "${r.source.name}" again to restore the section; the session does not hold its data.` : 'Session loaded.');
     // Show the session on the current source now, and apply it again to the next file loaded.
     pendingSession = r.source ? structuredClone(r.params) : null;
     pendingScale = r.source && r.source.scale ? r.source.scale : null;
     if (app.source) app.invalidate('slice');
   }
   syncAll();
-  toast('Session loaded.');
+  if (!r.source || r.source.synthetic) toast('Session loaded.');
 }
 
 $('#session-input').addEventListener('change', async (e) => {
@@ -335,33 +586,12 @@ $('#session-input').addEventListener('change', async (e) => {
   try { applySession(JSON.parse(await f.text())); } catch { showError('The session file is not valid JSON.'); }
 });
 
-/* ---------- Export menu ---------- */
+/* ---------- Export ---------- */
 
-const menu = $('#export-menu');
-const toggleMenu = (open = menu.hidden, refocus = false) => {
-  menu.hidden = !open;
-  $('#export-toggle').setAttribute('aria-expanded', String(open));
-  if (open) menu.querySelector('button').focus();
-  else if (refocus) $('#export-toggle').focus();
-};
-$('#export-toggle').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
-document.addEventListener('click', (e) => { if (!menu.hidden && !menu.contains(e.target)) toggleMenu(false); });
-// Arrow keys move through the menu and never reach the plane shortcuts.
-menu.addEventListener('keydown', (e) => {
-  const items = $$('button', menu);
-  const i = items.indexOf(document.activeElement);
-  const to = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
-  if (to !== undefined) {
-    e.preventDefault();
-    items[(to + items.length) % items.length].focus();
-  }
-  if (e.key !== 'Escape') e.stopPropagation();
-});
-menu.addEventListener('focusout', (e) => { if (!menu.hidden && !$('.menu-wrap').contains(e.relatedTarget)) toggleMenu(false); });
 async function doExport(kind) {
-  toggleMenu(false);
+  panels.close(false);
   try {
-    const msg = await runExport(kind, app, { pickSession: () => $('#session-input').click(), ground: () => views.pattern.ground() });
+    const msg = await runExport(kind, app, { pickSession: () => $('#session-input').click() });
     if (msg) toast(msg);
   } catch (err) {
     toast(err.message);
@@ -369,50 +599,34 @@ async function doExport(kind) {
 }
 $$('[data-export]').forEach((b) => b.addEventListener('click', () => doExport(b.dataset.export)));
 
-/* ---------- Overlays ---------- */
+/* ---------- Today ---------- */
 
-/* While a dialog is open, everything behind it is inert, so Tab stays inside it. */
-const help = $('#help');
-let helpReturn = null, todayReturn = null;
-function setInert() {
-  $('#app').inert = !help.hidden || today.isOpen;
-  $('#today').inert = !help.hidden && today.isOpen;
-}
-function showHelp(on) {
-  if (on === !help.hidden) return;
-  if (on) helpReturn = document.activeElement;
-  help.hidden = !on;
-  setInert();
-  if (on) $('.close', help).focus();
-  else if (helpReturn && helpReturn.focus) helpReturn.focus();
-}
+let todayReturn = null;
+const today = new Today((pick) => loadSynthetic(pick.id, { plane: pick.plane, crop: pick.crop, levels: pick.spec.levels }), toast);
+today.onClose = () => {
+  $('#app').inert = false;
+  const back = todayReturn && document.contains(todayReturn) ? todayReturn : $('#tb-today');
+  back.focus({ preventScroll: true });
+};
 function openToday() {
   if (today.isOpen) return;
   todayReturn = document.activeElement;
-  toggleMenu(false);
+  panels.close(false);
   today.open();
-  setInert();
+  $('#app').inert = true;
   $('#timer-start').focus();
 }
-$('#help-toggle').addEventListener('click', () => showHelp(help.hidden));
-help.addEventListener('click', (e) => { if (e.target === help) showHelp(false); });
-$$('[data-close]').forEach((b) => b.addEventListener('click', () => {
-  if (b.dataset.close === 'today') today.close(); else showHelp(false);
-}));
+$('#tb-today').addEventListener('click', openToday);
+$('[data-close="today"]').addEventListener('click', () => today.close());
 
-const today = new Today((pick) => loadSynthetic(pick.id, { plane: pick.plane, crop: pick.crop, levels: pick.spec.levels }), toast);
-today.onClose = () => {
-  setInert();
-  const back = todayReturn && document.contains(todayReturn) ? todayReturn : $('#open-today');
-  back.focus();
-};
-$('#open-today').addEventListener('click', openToday);
+/* ---------- Keyboard ---------- */
 
+const editing = () => today.isOpen;
 installShortcuts({
-  escape: () => { if (!help.hidden) showHelp(false); else if (!menu.hidden) toggleMenu(false, true); else if (today.isOpen) today.close(); else cancelLoad(); },
-  view: (e) => { if (!today.isOpen) setView(['3d', 'slice', 'cane', 'pattern'][+e.key - 1]); },
+  escape: () => { if (panels.isOpen) panels.close(true); else if (today.isOpen) today.close(); else cancelLoad(); },
+  mode: (e) => { if (!editing()) setMode(['section', 'cane', 'pattern'][+e.key - 1]); },
   offset: (e) => {
-    if (today.isOpen || !app.source || app.source.kind === 'image') return;
+    if (editing() || !app.source || app.source.kind === 'image') return;
     const r = app.offsetRange();
     const step = (e.shiftKey ? 10 : 1) * Math.max(r / 100, 1e-3);
     const p = app.params.plane;
@@ -421,7 +635,7 @@ installShortcuts({
     syncAll();
   },
   tilt: (e) => {
-    if (today.isOpen || !app.source || app.source.kind === 'image') return;
+    if (editing() || !app.source || app.source.kind === 'image') return;
     const p = app.params.plane;
     const k = e.shiftKey ? 'tiltB' : 'tiltA';
     p[k] = Math.max(-80, Math.min(80, p[k] + (e.key === 'ArrowRight' ? 1 : -1)));
@@ -429,55 +643,55 @@ installShortcuts({
     syncAll();
   },
   bracket: (e) => {
-    if (today.isOpen) return;
+    if (editing()) return;
     const d = e.key === ']' ? 1 : -1;
-    if ((current === 'slice' || current === '3d') && app.source && app.source.kind === 'volume') {
+    if (mode === 'section' && app.source && app.source.kind === 'volume') {
       app.params.slab.n = Math.max(1, Math.min(32, app.params.slab.n + d));
       app.changed('slab.n');
-    } else {
-      const n = Math.max(2, Math.min(6, app.params.levels + d));
-      if (n === app.params.levels) return;
-      app.params.levels = n;
-      app.changed('levels');
-    }
-    syncAll();
+      syncAll();
+    } else setLevels(app.params.levels + d);
   },
   random: () => { if (today.isOpen) $('#today-random').click(); else randomPlane(); },
-  save: () => { if (!today.isOpen && help.hidden) doExport('session-save'); },
-  export: () => { if (!today.isOpen && help.hidden) toggleMenu(true); },
-  help: () => showHelp(help.hidden),
-  split: () => { if (!today.isOpen && help.hidden) { split = !split; refreshVisibility(); } },
-  today: () => { if (help.hidden) openToday(); },
+  save: () => { if (!editing()) doExport('session-save'); },
+  export: () => { if (!editing()) panels.open('export', $('[data-panel="export"]')); },
+  help: () => { if (!editing()) panels.toggle('help', $('[data-panel="help"]')); },
+  today: () => openToday(),
+  flat: () => { if (!editing() && glOK && mode !== 'pattern') { flatOn = !flatOn; refreshView(true); } },
+  frame: () => { if (!editing() && glOK && !usingFlat()) stage.frame(true); },
 });
 
 /* ---------- Pipeline updates ---------- */
 
 app.on('updated', (ran) => {
   const has = (...k) => k.some((x) => ran.has(x));
-  if (has('slice')) views.slice.refresh();
-  if (has('slice', 'crop') && views['3d'].ok) views['3d'].updatePlane();
-  if (has('slice', 'crop') && isVisible('slice')) views.slice.draw();
-  if (has('crop', 'quant', 'render')) hist.draw();
-  if (has('crop', 'quant', 'clean', 'render')) renderLevels($('#level-list'), app);
-  if (has('sheet', 'render')) renderSheet($('#sheet'), app);
-  if (has('render', 'sheet') && isVisible('cane')) views.cane.draw();
-  if (has('render', 'pattern', 'sheet') && isVisible('pattern')) views.pattern.draw();
+  if (has('slice')) { flat.refresh(); dirty.section = true; }
+  if (has('crop')) dirty.crop = true;
+  if (has('render', 'sheet')) dirty.cane = true;
+  if (has('render', 'pattern', 'sheet')) dirty.pattern = true;
+  const open = (id) => !$(`#panel-${id}`).hidden;
+  if (has('crop', 'quant', 'render') && open('clays') && $('#adjust').open) hist.draw();
+  if (has('crop', 'quant', 'clean', 'render') && open('clays')) renderLevels($('#level-list'), app);
+  if (has('crop', 'clean', 'render', 'sheet')) drawChips();
+  if (has('sheet', 'render') && open('build')) { renderSheet($('#sheet'), app); panels.place(); }
   if (has('crop')) segSyncs.forEach((f) => f());
+  applyVisible();
 });
 
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  refreshVisibility();
-  hist.draw();
-});
+/* ---------- Still images for the README ---------- */
+
+/** In still mode, say when the scene is drawn and settled. */
+function markStill() {
+  clearTimeout(markStill.t);
+  markStill.t = setTimeout(() => { if (glOK) stage.invalidate(); window.laminaStill = true; }, 400);
+}
 
 /* ---------- Start ---------- */
 
 drawPalette();
 syncAll();
-setView('cane');
-document.body.classList.add('no-volume', 'not-loaf');
-$('#empty').hidden = false;
-const start = new URLSearchParams(location.search).get('specimen');
+body.classList.add('no-source', 'no-volume', 'not-loaf');
+setMode(still || 'cane');
+const start = query.get('specimen');
 loadSynthetic(SPECIMENS.some((s) => s.id === start) ? start : 'osteon');
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
@@ -485,4 +699,4 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // Exposed for automated checks and the browser console.
-window.lamina = { app, setView, loadSynthetic, today };
+window.lamina = { app, setMode, loadSynthetic, today, panels, stage, modes, get mode() { return mode; }, setFlat: (on) => { flatOn = on; refreshView(true); } };
