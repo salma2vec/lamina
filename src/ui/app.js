@@ -10,7 +10,7 @@ import { sliceVolume } from '../volume/resample.js';
 import { cropSlice } from '../cane/crop.js';
 import { outlineMask } from '../cane/outline.js';
 import { histogram, initialThresholds, quantise, levelCounts } from '../cane/quantise.js';
-import { cleanup, smallestFeature } from '../cane/morph.js';
+import { cleanup, smallestFeature, removeSmallRegions } from '../cane/morph.js';
 import { renderCane } from '../cane/render.js';
 import { defaultMapping } from '../cane/palette.js';
 import { computeSheet } from '../sheet/quantities.js';
@@ -42,7 +42,7 @@ export class App {
     /** Current source or null. */
     this.source = null;
     /** Derived data. */
-    this.d = { slice: null, crop: null, raw: null, labels: null, counts: [], smallest: null, sheet: null };
+    this.d = { slice: null, crop: null, raw: null, labels: null, counts: [], smallest: null, sheet: null, caneImage: null };
     this.G = 320;
     this.autoThresholds = true;
     this.keepParams = false;
@@ -52,6 +52,28 @@ export class App {
     this.maskKey = '';
     this.mask = null;
     this.caneCanvas = document.createElement('canvas');
+    /** Last stage that runs at once; later stages wait until changes pause. */
+    this.horizon = STAGES.length - 1;
+    this.idleTimer = 0;
+    /** True while a control is being dragged: clean-up skips its slowest pass. */
+    this.interactive = false;
+    this.roughClean = false;
+  }
+
+  /**
+   * Run stages up to `stage` at once and defer the rest until changes pause.
+   * @param {string} stage
+   */
+  setHorizon(stage) {
+    const i = STAGES.indexOf(stage);
+    this.horizon = i < 0 ? STAGES.length - 1 : i;
+    if (this.dirty.size) this.invalidate(STAGES[STAGES.length - 1]);
+  }
+
+  /** A drag ended: finish any clean-up that was cut short while it lasted. */
+  settle() {
+    this.interactive = false;
+    if (this.roughClean) this.invalidate('clean');
   }
 
   /** Subscribe to an event: 'updated' (Set of stages), 'source', 'params'. */
@@ -188,15 +210,19 @@ export class App {
     this.invalidate('slice');
   }
 
-  run() {
+  run(all = false) {
     this.raf = 0;
+    clearTimeout(this.idleTimer);
     const ran = new Set();
-    for (const st of STAGES) {
+    const limit = all ? STAGES.length - 1 : this.horizon;
+    for (let k = 0; k <= limit; k++) {
+      const st = STAGES[k];
       if (!this.dirty.has(st)) continue;
       this.dirty.delete(st);
       this[`stage_${st}`]();
       ran.add(st);
     }
+    if (this.dirty.size) this.idleTimer = setTimeout(() => this.run(true), 160);
     this.emit('updated', ran);
   }
 
@@ -258,9 +284,17 @@ export class App {
     if (!raw) { this.d.labels = null; this.d.counts = []; this.d.smallest = null; return; }
     const p = this.params, G = this.G;
     const minWidth = p.clean.minFeature / (p.cane.size / G);
-    this.d.labels = cleanup(raw, G, G, { median: p.clean.median, openClose: p.clean.openClose, smooth: p.clean.smooth, minWidth, levels: p.levels });
+    // While dragging, regions are merged by area only; the width pass follows on release.
+    this.roughClean = this.interactive;
+    const o = { median: p.clean.median, openClose: p.clean.openClose, smooth: p.clean.smooth, minWidth, levels: p.levels };
+    if (this.roughClean) {
+      this.d.labels = cleanup(raw, G, G, { ...o, minWidth: 0 });
+      if (minWidth > 1) this.d.labels = removeSmallRegions(this.d.labels, G, G, Math.ceil(minWidth * minWidth * 0.5));
+    } else {
+      this.d.labels = cleanup(raw, G, G, o);
+      this.d.smallest = smallestFeature(this.d.labels, G, G);
+    }
     this.d.counts = levelCounts(this.d.labels, p.levels);
-    this.d.smallest = smallestFeature(this.d.labels, G, G);
   }
 
   /** Clay colour per level. */
@@ -272,8 +306,9 @@ export class App {
   stage_render() {
     const l = this.d.labels;
     const cv = this.caneCanvas;
-    if (!l) { cv.width = cv.height = 1; return; }
+    if (!l) { cv.width = cv.height = 1; this.d.caneImage = null; return; }
     const img = renderCane(l, this.G, this.G, this.colours(), { scale: 2 });
+    this.d.caneImage = img;
     cv.width = img.width; cv.height = img.height;
     cv.getContext('2d').putImageData(new ImageData(img.data, img.width, img.height), 0, 0);
   }
