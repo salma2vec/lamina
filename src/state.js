@@ -24,19 +24,27 @@ const KEYS = ['plane', 'slab', 'levels', 'thresholds', 'mapping', 'clean', 'outl
 
 /**
  * Serialise parameters and a source reference to a session object.
- * Volume and mesh data are never stored.
+ * Volume and mesh data are never stored. A template is stored as its id and
+ * parameter values, which is all it needs to be drawn again.
  * @param {Object} params
- * @param {{kind:string, name:string, synthetic?:{id:string, seed:number}, scale?:number}|null} source
- *   scale: millimetres per voxel, pixel or mesh unit, when the user set it
+ * @param {{kind:string, name:string, synthetic?:{id:string, seed:number}, scale?:number, id?:string, values?:Object}|null} source
+ *   scale: millimetres per voxel, pixel or mesh unit, when the user set it;
+ *   id and values: the template and its parameters, for kind 'template'
  */
 export function toSession(params, source) {
   const out = { app: 'lamina', version: VERSION, saved: new Date().toISOString() };
-  out.source = source ? {
-    kind: source.kind,
-    name: source.name,
-    ...(source.synthetic ? { synthetic: source.synthetic } : { note: 'Source data is not stored. Load the same file again to restore the slice.' }),
-    ...(!source.synthetic && source.scale > 0 ? { scale: source.scale } : {}),
-  } : null;
+  let ref = null;
+  if (source && source.kind === 'template') {
+    ref = { kind: 'template', name: source.name, id: source.id, values: structuredClone(source.values || {}) };
+  } else if (source) {
+    ref = {
+      kind: source.kind,
+      name: source.name,
+      ...(source.synthetic ? { synthetic: source.synthetic } : { note: 'Source data is not stored. Load the same file again to restore the slice.' }),
+      ...(!source.synthetic && source.scale > 0 ? { scale: source.scale } : {}),
+    };
+  }
+  out.source = ref;
   for (const k of KEYS) out[k] = structuredClone(params[k]);
   return out;
 }
@@ -85,5 +93,10 @@ export function fromSession(obj) {
   }
   const s = obj.source && typeof obj.source === 'object' ? { ...obj.source } : null;
   if (s && !(typeof s.scale === 'number' && s.scale > 0 && Number.isFinite(s.scale))) delete s.scale;
+  if (s && s.kind === 'template') {
+    // Values are checked against the template's own ranges when it is loaded.
+    if (typeof s.id !== 'string') return { params: p, source: null };
+    s.values = s.values && typeof s.values === 'object' && !Array.isArray(s.values) ? { ...s.values } : {};
+  }
   return { params: p, source: s };
 }

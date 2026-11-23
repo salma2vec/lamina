@@ -32,6 +32,7 @@ export function stageFor(key) {
   if (key === 'mapping' || key.startsWith('palette')) return 'render';
   if (key.startsWith('cane.')) return 'sheet';
   if (key.startsWith('pattern.')) return 'pattern';
+  if (key === 'template') return 'clean';
   return 'slice';
 }
 
@@ -109,13 +110,14 @@ export class App {
 
   /** Range for the plane offset slider given the current tilt. */
   offsetRange() {
-    if (!this.source || this.source.kind === 'image') return 1;
+    if (!this.source || this.source.kind === 'image' || this.source.kind === 'template') return 1;
     return halfExtentAlong(this.source.size, this.frame.n);
   }
 
   /**
    * Install a new source.
-   * @param {Object} src {kind, name, mesh|volume|image, synthetic?}
+   * @param {Object} src {kind, name, mesh|volume|image|template, synthetic?, values?}
+   *   A template source draws its labels from parameter values instead of a section.
    * @param {Object} [defaults] specimen defaults {plane, crop, levels}
    */
   setSource(src, defaults = {}) {
@@ -128,6 +130,9 @@ export class App {
       s.size = s.mesh.size.slice();
       s.unitKnown = true;
       s.meshScale = s.meshScale || 1;
+    } else if (s.kind === 'template') {
+      s.size = [1, 1, 0];
+      s.unitKnown = true;
     } else {
       const px = imagePixel(s);
       s.size = [s.image.w * px, s.image.h * px, 0];
@@ -135,7 +140,17 @@ export class App {
     }
     s.ref = Math.max(...s.size);
     this.source = s;
-    if (!this.keepParams) {
+    this.d.assembly = null;
+    if (!this.keepParams && s.kind === 'template') {
+      // The template's own outline and clays, one clay per label.
+      const p = this.params, t = s.template;
+      Object.assign(p.outline, { shape: t.outline.shape, aspect: t.outline.aspect, rotation: 0, zoom: 1, ox: 0, oy: 0 });
+      p.palette = { preset: 'custom', swatches: structuredClone(t.clays) };
+      p.levels = t.clays.length;
+      p.mapping = t.clays.map((_, i) => i);
+      p.thresholds = [];
+      this.autoThresholds = false;
+    } else if (!this.keepParams) {
       const p = this.params;
       p.plane = { axis: 'xy', offset: 0, tiltA: 0, tiltB: 0, ...(defaults.plane || {}) };
       p.slab = { n: 1, mode: 'mean' };
@@ -229,7 +244,7 @@ export class App {
   stage_slice() {
     const s = this.source;
     this.d.slice = null;
-    if (!s) return;
+    if (!s || s.kind === 'template') return;
     if (s.kind === 'image') {
       this.d.slice = { data: s.image.data, w: s.image.w, h: s.image.h, px: imagePixel(s), loops: null };
       return;
@@ -257,10 +272,18 @@ export class App {
   stage_crop() {
     const sl = this.d.slice;
     this.d.crop = null;
-    if (!sl) return;
     const o = this.params.outline;
     const key = `${o.shape}:${o.aspect}`;
     if (key !== this.maskKey) { this.mask = outlineMask(o.shape, this.G, o.aspect); this.maskKey = key; }
+    if (this.source && this.source.kind === 'template') {
+      const p = this.params;
+      this.d.crop = { values: null, mask: this.mask, hist: null };
+      if (p.mapping.length !== p.levels || p.mapping.some((m) => m >= p.palette.swatches.length)) {
+        p.mapping = defaultMapping(p.levels, p.palette.swatches);
+      }
+      return;
+    }
+    if (!sl) return;
     const values = cropSlice(sl, this.G, o, this.ref);
     const hist = histogram(values, this.mask, 128);
     this.d.crop = { values, mask: this.mask, hist };
@@ -276,13 +299,14 @@ export class App {
 
   stage_quant() {
     const c = this.d.crop;
-    this.d.raw = c ? quantise(c.values, this.params.thresholds, c.mask) : null;
+    this.d.raw = c && c.values ? quantise(c.values, this.params.thresholds, c.mask) : null;
   }
 
   stage_clean() {
     const raw = this.d.raw;
-    if (!raw) { this.d.labels = null; this.d.counts = []; this.d.smallest = null; return; }
     const p = this.params, G = this.G;
+    if (this.source && this.source.kind === 'template') { this.templateLabels(); return; }
+    if (!raw) { this.d.labels = null; this.d.counts = []; this.d.smallest = null; return; }
     const minWidth = p.clean.minFeature / (p.cane.size / G);
     // While dragging, regions are merged by area only; the width pass follows on release.
     this.roughClean = this.interactive;
@@ -295,6 +319,22 @@ export class App {
       this.d.smallest = smallestFeature(this.d.labels, G, G);
     }
     this.d.counts = levelCounts(this.d.labels, p.levels);
+  }
+
+  /** Draw a template's labels at the current outline and cane size. They need no clean-up. */
+  templateLabels() {
+    const s = this.source, p = this.params, G = this.G;
+    const r = s.template.generate(s.values, { G, size: p.cane.size, shape: p.outline.shape, aspect: p.outline.aspect });
+    if (r.levels !== p.levels) {
+      p.levels = r.levels;
+      p.mapping = defaultMapping(p.levels, p.palette.swatches);
+    }
+    this.d.labels = r.labels;
+    this.d.assembly = r.assembly;
+    this.d.counts = levelCounts(r.labels, p.levels);
+    // While a parameter is dragged the thinnest region waits for the release.
+    this.roughClean = this.interactive;
+    if (!this.roughClean) this.d.smallest = smallestFeature(r.labels, G, G);
   }
 
   /** Clay colour per level. */

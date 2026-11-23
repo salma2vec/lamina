@@ -28,6 +28,18 @@ const PRINTABLE = { A4: [186, 273], letter: [191.9, 255.4] };
 /** Specimen and slice metadata rows for the build sheet. */
 export function metadata(app) {
   const s = app.source, p = app.params;
+  if (s.kind === 'template') {
+    const vals = s.template.params.map((q) => {
+      const v = s.values[q.key];
+      const text = q.type === 'choice' ? (q.options.find((o) => o.id === v) || {}).name : `${v}${q.unit ? ` ${q.unit}` : ''}`;
+      return `${q.label.toLowerCase()} ${text}`;
+    });
+    return [
+      { label: 'Source', value: `${s.name} (cane template)` },
+      { label: 'Parameters', value: vals.join(', ') },
+      { label: 'Date', value: localDateString() },
+    ];
+  }
   const rows = [{ label: 'Source', value: `${s.name}${s.synthetic ? ' (synthetic study volume)' : ''}` }];
   if (s.kind !== 'image') {
     rows.push({ label: 'Plane', value: `${p.plane.axis.toUpperCase()}, offset ${fx(p.plane.offset, 2)} ${app.unit}, tilt A ${fx(p.plane.tiltA, 1)}°, tilt B ${fx(p.plane.tiltB, 1)}°` });
@@ -38,6 +50,21 @@ export function metadata(app) {
   rows.push({ label: 'Clean-up', value: `majority ${p.clean.median} px, open/close ${p.clean.openClose} px, smooth ${p.clean.smooth} px, minimum feature ${fx(p.clean.minFeature, 1)} mm` });
   rows.push({ label: 'Date', value: localDateString() });
   return rows;
+}
+
+/**
+ * Parts and steps of a template cane, with each part's clay named from the current palette.
+ * @returns {{parts:Object[], steps:string[]}|undefined}
+ */
+export function assembly(app) {
+  const a = app.d.assembly;
+  if (!a || !app.source || app.source.kind !== 'template') return undefined;
+  const sw = app.params.palette.swatches, map = app.params.mapping;
+  const parts = a.parts.map((q) => {
+    const c = q.clay === null || q.clay === undefined ? null : sw[map[q.clay]] || sw[0];
+    return { name: q.name, qty: q.qty, size: q.size, clay: c ? c.name : null, colour: c ? c.colour : null };
+  });
+  return { parts, steps: a.steps };
 }
 
 const toBlob = (canvas) => new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('The image could not be created.'))), 'image/png'));
@@ -53,7 +80,8 @@ export async function runExport(kind, app, ctx) {
   if (kind === 'session-load') { ctx.pickSession(); return null; }
   if (kind === 'session-save') {
     const s = app.source;
-    const src = s ? { kind: s.kind, name: s.name, synthetic: s.synthetic, scale: s.userScale } : null;
+    const src = !s ? null : s.kind === 'template' ? { kind: 'template', name: s.name, id: s.template.id, values: s.values }
+      : { kind: s.kind, name: s.name, synthetic: s.synthetic, scale: s.userScale };
     const json = JSON.stringify(toSession(app.params, src), null, 2);
     download(new Blob([json], { type: 'application/json' }), `${base}-session.json`);
     return 'Session saved.';
@@ -85,7 +113,7 @@ export async function runExport(kind, app, ctx) {
     const [printWidth, printHeight] = PRINTABLE[size];
     const fit = { page: size === 'A4' ? 'A4' : 'Letter', width, height, printWidth, printHeight };
     const sheet = document.getElementById('print-sheet');
-    sheet.innerHTML = printSheetHTML({ svg, sheet: app.d.sheet, params: { ...app.params.cane, minFeature: app.params.cane.minReduced }, meta: metadata(app), title: title(app), fit });
+    sheet.innerHTML = printSheetHTML({ svg, sheet: app.d.sheet, params: { ...app.params.cane, minFeature: app.params.cane.minReduced }, meta: metadata(app), title: title(app), fit, assembly: assembly(app) });
     window.print();
     return width > printWidth || height > printHeight ? `The template is larger than ${fit.page} and will be cut off. Export the SVG instead.` : null;
   }

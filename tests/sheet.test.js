@@ -118,6 +118,14 @@ test('print sheet lists clays and warnings', () => {
   assert.doesNotMatch(html, /larger than the printable area/);
   const big = printSheetHTML({ svg: '<svg></svg>', sheet, params: { size: 200, length: 150, target: 15, density: 1.9, waste: 10, minFeature: 1 }, meta: [], title: 'Big', fit: { page: 'A4', width: 228, height: 260, printWidth: 186, printHeight: 273 } });
   assert.match(big, /228 × 260 mm\. It is larger than the printable area of A4 \(186 × 273 mm\)/);
+  assert.doesNotMatch(html, /ps-steps/);
+  const built = printSheetHTML({
+    svg: '<svg></svg>', sheet, params: { size: 60, length: 150, target: 15, density: 1.9, waste: 10, minFeature: 1 }, meta: [], title: 'Ammonite',
+    assembly: { parts: [{ name: 'Chamber wedges', qty: 12, size: '4.0–9.0 mm', clay: null }, { name: 'Septa sheet', size: '1.2 mm thick', clay: 'Septa <black>', colour: '#2b2420' }], steps: ['Roll the wedges.', 'Wrap them.'] },
+  });
+  assert.match(built, /<td>Mixed<\/td><td class="num">12<\/td>/);
+  assert.match(built, /Septa &lt;black&gt;/);
+  assert.match(built, /<ol class="ps-steps"><li>Roll the wedges\.<\/li><li>Wrap them\.<\/li><\/ol>/);
 });
 
 import { defaultParams, toSession, fromSession } from '../src/state.js';

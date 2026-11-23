@@ -27,6 +27,7 @@
   <nav class="toolbar left ui" aria-label="File">
     <button class="tb" id="tb-open" data-icon="open" data-tip="Open a file" data-key-hint="Drop anywhere"></button>
     <button class="tb" data-panel="specimens" data-icon="specimens" data-tip="Study volumes"></button>
+    <button class="tb" data-panel="templates" data-icon="templates" data-tip="Cane templates"></button>
     <button class="tb" id="tb-today" data-icon="today" data-tip="Today" data-key-hint="T"></button>
     <button class="tb" data-panel="export" data-icon="export" data-tip="Export" data-key-hint="E"></button>
     <button class="tb" data-panel="help" data-icon="help" data-tip="Help" data-key-hint="?"></button>
@@ -37,6 +38,7 @@
   </div>
 
   <nav class="toolbar right ui" aria-label="Design">
+    <button class="tb" data-panel="template" data-icon="params" data-tip="Template"></button>
     <button class="tb" data-panel="plane" data-icon="plane" data-tip="Plane"></button>
     <button class="tb" data-panel="clays" data-icon="clays" data-tip="Clays"></button>
     <button class="tb" data-panel="shape" data-icon="shape" data-tip="Shape"></button>
@@ -82,6 +84,19 @@
     <ul class="list" id="specimen-list"></ul>
   </section>
 
+  <section class="panel ui" id="panel-templates" hidden role="dialog" aria-label="Cane templates" tabindex="-1">
+    <div class="grab"></div>
+    <h2>Cane templates</h2>
+    <ul class="list" id="template-list"></ul>
+  </section>
+
+  <section class="panel ui wide-labels" id="panel-template" hidden role="dialog" aria-label="Template" tabindex="-1">
+    <div class="grab"></div>
+    <h2 id="template-title">Template</h2>
+    <div id="template-params"></div>
+    <div class="buttons"><button class="btn" id="template-reset">Reset</button></div>
+  </section>
+
   <section class="panel ui" id="panel-export" hidden role="dialog" aria-label="Export" tabindex="-1">
     <div class="grab"></div>
     <h2>Export</h2>
@@ -105,6 +120,7 @@
       <p><b>Section</b> cuts the specimen with a plane. <b>Cane</b> turns the section into coloured clays. <b>Pattern</b> lays slices of the cane on a slab or a bowl.</p>
       <p>Drag to turn. Scroll or pinch to zoom. Double-click to frame the object. In Section, drag the plane to move it.</p>
       <p>The flat view shows the section or cane front-on, with a scale bar. Drag there to move the section under the outline; scroll to zoom it.</p>
+      <p><b>Cane templates</b> draw a constructed cane from a few measurements instead of a scan. The build sheet lists the parts and the steps to assemble them.</p>
       <p><b>Today</b> is a daily study: the same specimen and plane for everyone on a date. Look at the section, sketch a cane with the given number of clays, and stop when the timer ends. Reveal shows Lamina's cane.</p>
     </div>
     <h3>Keys</h3>
@@ -156,7 +172,7 @@
   <section class="panel ui" id="panel-clays" hidden role="dialog" aria-label="Clays" tabindex="-1">
     <div class="grab"></div>
     <h2>Clays</h2>
-    <div class="row wide"><span class="label">Number</span>
+    <div class="row wide" id="levels-row"><span class="label">Number</span>
       <div class="seg" role="radiogroup" aria-label="Number of clays" id="levels-seg">
         <button data-levels="2" role="radio">2</button><button data-levels="3" role="radio">3</button><button data-levels="4" role="radio">4</button><button data-levels="5" role="radio">5</button><button data-levels="6" role="radio">6</button>
       </div>

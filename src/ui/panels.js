@@ -3,6 +3,7 @@ import { el, fx } from './dom.js';
 import { icon } from './icons.js';
 import { PRESETS } from '../cane/palette.js';
 import { drawThinnest } from './flat.js';
+import { assembly } from './export.js';
 
 const chip = (colour, cls = 'chip') => {
   const c = el('span', { class: cls });
@@ -20,9 +21,11 @@ export function renderLevels(root, app) {
   root.replaceChildren();
   for (let l = p.levels - 1; l >= 0; l--) {
     const cur = sw[p.mapping[l]] || sw[0];
+    // A template's levels are its parts, not ranges of section values.
+    const range = t.length === p.levels + 1 ? `values ${t[l].toFixed(2)}–${t[l + 1].toFixed(2)}` : null;
     const sel = el('select', {
-      'aria-label': `Clay for level ${l + 1}, section values ${t[l].toFixed(2)} to ${t[l + 1].toFixed(2)}`,
-      title: `Level ${l + 1}: values ${t[l].toFixed(2)}–${t[l + 1].toFixed(2)}`,
+      'aria-label': `Clay for level ${l + 1}${range ? `, ${range}` : ''}`,
+      title: `Level ${l + 1}${range ? `: ${range}` : ''}`,
       onchange: (e) => { p.mapping[l] = +e.target.value; app.changed('mapping'); },
     }, sw.map((s, i) => el('option', { value: i, text: s.name, selected: p.mapping[l] === i })));
     root.append(el('li', {}, [chip(cur.colour), sel, el('span', { class: 'num', text: `${fx(((counts[l] || 0) / total) * 100, 1)}%` })]));
@@ -115,6 +118,20 @@ export function renderSheet(root, app) {
   body.append(el('tr', { class: 'total' }, [el('th', { text: `Total, ${fx(p.waste, 0)}% waste` }), el('td', { text: '' }), el('td', { text: fx(s.totalMass, 0) })]));
   root.append(el('table', { class: 'figures clays' }, [head, body]));
   for (const w of warnings(app)) root.append(w);
+  const a = assembly(app);
+  if (a) {
+    const rows = a.parts.map((q) => el('tr', {}, [
+      el('th', {}, [q.colour ? chip(q.colour, 'sw') : '', q.name]),
+      el('td', { class: 'num', text: q.qty ? `${q.qty} ×` : '' }),
+      el('td', { text: q.size, title: q.clay || 'Mixed clays' }),
+    ]));
+    root.append(el('div', { class: 'assembly' }, [
+      el('h3', { text: 'Parts' }),
+      el('table', { class: 'parts' }, [el('tbody', {}, rows)]),
+      el('h3', { text: 'Steps' }),
+      el('ol', { class: 'steps' }, a.steps.map((t) => el('li', { text: t }))),
+    ]));
+  }
 }
 
 /** Warnings about the build, as paragraphs. */
@@ -146,6 +163,11 @@ export function renderFacts(root, app) {
   if (!s) return;
   const add = (k, v) => root.append(el('dt', { text: k }), el('dd', { text: v, title: v }));
   add('Name', s.name);
+  if (s.kind === 'template') {
+    add('Type', 'Cane template');
+    add('Clays', String(s.template.clays.length));
+    return;
+  }
   if (s.kind === 'volume') {
     const v = s.volume;
     add('Type', s.synthetic ? 'Synthetic study volume' : 'Volume');
@@ -175,6 +197,8 @@ export function renderChips(root, app, on) {
   const p = app.params, sw = p.palette.swatches;
   const counts = app.d.counts || [];
   const total = counts.reduce((a, b) => a + b, 0) || 1;
+  // A template has a fixed number of clays.
+  const fixed = app.source && app.source.kind === 'template';
   const minus = el('button', { class: 'step', title: 'Fewer clays ([)', 'aria-label': 'Fewer clays', disabled: p.levels <= 2 });
   minus.innerHTML = icon('minus');
   minus.addEventListener('click', () => on.step(-1));
@@ -189,5 +213,6 @@ export function renderChips(root, app, on) {
     b.addEventListener('click', () => on.open(root));
     chips.push(b);
   }
-  root.replaceChildren(minus, ...chips, plus);
+  if (fixed) root.replaceChildren(...chips);
+  else root.replaceChildren(minus, ...chips, plus);
 }

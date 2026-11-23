@@ -82,7 +82,7 @@ export class SectionMode {
     this.source = s;
     this.userMoved = false;
     this.clearPlane();
-    if (!s) { this.size = null; return; }
+    if (!s || s.kind === 'template') { this.size = null; this.stage.invalidate(); return; }
     this.size = s.size.slice();
     if (s.kind === 'image') {
       // A photographed section: a thin plate carrying the image.
@@ -155,7 +155,7 @@ export class SectionMode {
   updateSlice(app, iso) {
     const s = this.source, sl = app.d.slice;
     this.clearPlane();
-    if (!s || s.kind === 'image') { this.clip.normal.set(0, 0, -1); this.clip.constant = 1e9; this.stage.invalidate(); return; }
+    if (!s || s.kind === 'image' || s.kind === 'template') { this.clip.normal.set(0, 0, -1); this.clip.constant = 1e9; this.stage.invalidate(); return; }
     const f = app.frame;
     const n = new THREE.Vector3(...f.n);
     this.normal = n.clone();
@@ -235,7 +235,7 @@ export class SectionMode {
   updateCrop(app) {
     if (this.crop) { this.disposeObject(this.crop); this.crop = null; }
     const s = this.source, sl = app.d.slice;
-    if (!s || s.kind === 'image' || !sl) { this.stage.invalidate(); return; }
+    if (!s || s.kind === 'image' || s.kind === 'template' || !sl) { this.stage.invalidate(); return; }
     const o = app.params.outline;
     const poly = cropOutlineInSlice(o, outlinePolygon(o.shape, o.aspect), app.ref);
     const lift = Math.max(...s.size) * 0.0016;

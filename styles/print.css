@@ -22,3 +22,11 @@ html, body { background: #fff !important; color: #1b1a18 !important; height: aut
 .ps-warn { margin: 0 0 3mm; padding-left: 4mm; color: #7a1f1f; }
 p.ps-fit { padding-left: 0; }
 .ps-note { color: #5f5a52; font-size: 8.5pt; }
+.ps-assembly { break-inside: avoid; margin-bottom: 4mm; }
+.ps-parts { border-collapse: collapse; width: 100%; font-size: 9pt; margin-bottom: 3mm; }
+.ps-parts th { text-align: left; font-weight: 400; color: #1b1a18; border-top: 0.3mm solid #1b1a18; padding: 0.6mm 2mm 0.6mm 0; }
+.ps-parts td { padding: 0.6mm 2mm 0.6mm 0; border-top: 0.1mm solid #bbb; }
+.ps-parts .num { text-align: right; font-family: Menlo, Consolas, monospace; }
+.ps-parts .sw { display: inline-block; width: 3mm; height: 3mm; border: 0.1mm solid #1b1a18; margin-right: 2mm; vertical-align: -0.4mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.ps-steps { margin: 0; padding-left: 5mm; font-size: 9pt; }
+.ps-steps li { margin: 0 0 1mm; }

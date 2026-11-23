@@ -13,6 +13,8 @@ const n = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : '–');
  * @param {string} p.title
  * @param {{page:string, width:number, height:number, printWidth:number, printHeight:number}} [p.fit]
  *   template size and the printable area of the page, all in mm
+ * @param {{parts:{name:string, qty?:number, size:string, clay?:string, colour?:string}[], steps:string[]}} [p.assembly]
+ *   parts and steps of a constructed cane; clay and colour name the clay of a part, if it has one
  * @returns {string}
  */
 export function printSheetHTML(p) {
@@ -42,6 +44,15 @@ export function printSheetHTML(p) {
 </table>
 <table class="ps-clays"><thead><tr><th>Clay</th><th class="num">Area %</th><th class="num">Area mm²</th><th class="num">Volume cm³</th><th class="num">Wet g</th><th class="num">Shrink %</th><th class="num">Fired mm</th></tr></thead><tbody>${rows}</tbody></table>
 ${warnings.length ? `<ul class="ps-warn">${warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+${p.assembly ? assemblyHTML(p.assembly) : ''}
 <p class="ps-note">Check the 100 mm ruler on the template with a real ruler before you cut. If it measures more or less than 100 mm, the print is scaled: print again at 100 %. Masses include the waste allowance. Fired sizes apply to the reduced cane.</p>
 </section>`;
+}
+
+/** Parts list and numbered steps of a constructed cane. */
+function assemblyHTML(a) {
+  const parts = a.parts.map((q) => `<tr><td>${q.colour ? `<span class="sw" style="background:${esc(q.colour)}"></span>` : ''}${esc(q.name)}</td>` +
+    `<td>${q.clay ? esc(q.clay) : 'Mixed'}</td><td class="num">${q.qty ? q.qty : ''}</td><td>${esc(q.size)}</td></tr>`).join('');
+  return `<section class="ps-assembly"><table class="ps-parts"><thead><tr><th>Part</th><th>Clay</th><th class="num">Qty</th><th>Size at build</th></tr></thead><tbody>${parts}</tbody></table>` +
+    `<ol class="ps-steps">${a.steps.map((t) => `<li>${esc(t)}</li>`).join('')}</ol></section>`;
 }

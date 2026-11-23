@@ -23,6 +23,7 @@ import { SHAPES, outlinePolygon } from './cane/outline.js';
 import { LAYOUTS, ALTERNATIONS } from './pattern/tile.js';
 import { PRESETS, defaultMapping } from './cane/palette.js';
 import { fromSession } from './state.js';
+import { TEMPLATES, getTemplate, defaultValues, cleanValues } from './templates/index.js';
 
 const query = new URLSearchParams(location.search);
 const still = ['section', 'cane', 'pattern'].includes(query.get('still')) ? query.get('still') : null;
@@ -104,7 +105,9 @@ function progress(p, label) {
 
 /* ---------- Modes and views ---------- */
 
-const usingFlat = () => !glOK || (flatOn && mode !== 'pattern');
+const isTemplate = () => !!(app.source && app.source.kind === 'template');
+/** A template has no specimen, so Section shows the cane face flat. */
+const usingFlat = () => !glOK || (mode === 'section' && isTemplate()) || (flatOn && mode !== 'pattern');
 
 function setMode(m) {
   mode = m;
@@ -114,32 +117,37 @@ function setMode(m) {
   refreshView(true);
 }
 
-function refreshView(modeChanged = false) {
+/**
+ * Show the flat or the 3D view for the current mode.
+ * @param {boolean} [modeChanged] the mode or the view changed: restore that mode's camera
+ * @param {boolean} [apply] bring the view up to date now
+ */
+function refreshView(modeChanged = false, apply = true) {
   const f = usingFlat();
   $('#flat').hidden = !f;
   if (glOK) {
     $('#gl').hidden = f;
     stage.active = !f;
   }
-  flat.mode = mode;
+  flat.mode = mode === 'section' && isTemplate() ? 'cane' : mode;
   flat.visible = f;
   const t = $('#flat-toggle');
   t.setAttribute('aria-pressed', String(flatOn));
   t.innerHTML = icon(flatOn ? 'cube' : 'flat');
   t.dataset.tip = flatOn ? '3D view' : 'Flat view';
-  if (f) { flat.draw(); return; }
+  if (f) { if (apply) flat.draw(); return; }
   if (modeChanged) stage.show(mode);
-  applyVisible();
+  if (apply) applyVisible();
 }
 
 /** Bring the visible view up to date with the pipeline. */
 function applyVisible() {
   if (!app.source) return;
   if (usingFlat()) {
-    const need = mode === 'section' ? dirty.section || dirty.crop : mode === 'cane' ? dirty.cane : dirty.pattern;
+    const need = flat.mode === 'section' ? dirty.section || dirty.crop : flat.mode === 'cane' ? dirty.cane : dirty.pattern;
     if (need) flat.draw();
-    if (mode === 'section') dirty.section = dirty.crop = false;
-    else if (mode === 'cane') dirty.cane = false;
+    if (flat.mode === 'section') dirty.section = dirty.crop = false;
+    else if (flat.mode === 'cane') dirty.cane = false;
     else dirty.pattern = false;
     return;
   }
@@ -267,7 +275,7 @@ $('#reset-plane').addEventListener('click', () => {
 });
 
 function randomPlane() {
-  if (!app.source || app.source.kind === 'image') return;
+  if (!app.source || app.source.kind === 'image' || app.source.kind === 'template') return;
   const p = app.params.plane;
   p.axis = ['xy', 'xz', 'yz'][Math.floor(Math.random() * 3)];
   p.tiltA = Math.round((Math.random() - 0.5) * 60);
@@ -375,6 +383,71 @@ for (const s of SPECIMENS) {
   $('#specimen-list').append(el('li', {}, [b]));
 }
 
+/* ---------- Cane templates ---------- */
+
+for (const t of TEMPLATES) {
+  const first = t.summary.split(/(?<=\.)\s/)[0];
+  const b = el('button', { 'data-id': t.id, title: t.summary }, [el('span', { class: 'name', text: t.name }), el('span', { class: 'desc', text: first })]);
+  b.addEventListener('click', () => {
+    loadTemplate(t.id);
+    panels.open('template', $('[data-panel="template"]'));
+  });
+  $('#template-list').append(el('li', {}, [b]));
+}
+
+/**
+ * Make a template the current source.
+ * @param {string} id
+ * @param {Object} [values] parameter values; defaults when missing
+ * @param {boolean} [keep] keep the current parameters (a restored session)
+ */
+function loadTemplate(id, values, keep = false) {
+  const t = getTemplate(id);
+  if (!t) return;
+  cancelLoad();
+  ++loadSeq;
+  progress(null);
+  showError('');
+  showNote('');
+  pendingSession = pendingScale = null;
+  app.keepParams = keep;
+  app.setSource({ kind: 'template', name: t.name, template: t, values: values ? cleanValues(t, values) : defaultValues(t) });
+  drawPalette();
+}
+
+const decimals = (step) => (String(step).split('.')[1] || '').length;
+/** Template parameters as controls, generated from the template's list. */
+function renderTemplateParams() {
+  const s = app.source;
+  if (!s || s.kind !== 'template') return;
+  const t = s.template;
+  $('#template-title').textContent = t.name;
+  const rows = t.params.map((q) => {
+    const id = `tp-${q.key}`;
+    if (q.type === 'choice') {
+      const sel = el('select', { id }, q.options.map((o) => el('option', { value: o.id, text: o.name, selected: s.values[q.key] === o.id })));
+      sel.addEventListener('change', () => { s.values[q.key] = sel.value; app.changed('template'); });
+      return el('div', { class: 'row wide' }, [el('label', { for: id, text: q.label, title: q.label }), sel]);
+    }
+    const fmt = (v) => `${Number(v).toFixed(decimals(q.step))}${q.unit ? ` ${q.unit}` : ''}`;
+    const out = el('output', { text: fmt(s.values[q.key]) });
+    const r = el('input', { type: 'range', id, min: q.min, max: q.max, step: q.step, value: s.values[q.key] });
+    r.addEventListener('pointerdown', () => { app.interactive = true; });
+    r.addEventListener('input', () => { s.values[q.key] = parseFloat(r.value); out.textContent = fmt(r.value); app.changed('template'); });
+    r.addEventListener('change', () => app.settle());
+    return el('div', { class: 'row' }, [el('label', { for: id, text: q.label, title: q.label }), r, out]);
+  });
+  $('#template-params').replaceChildren(...rows);
+  panels.place();
+}
+$('#template-reset').addEventListener('click', () => {
+  const s = app.source;
+  if (!s || s.kind !== 'template') return;
+  s.values = defaultValues(s.template);
+  renderTemplateParams();
+  app.changed('template');
+});
+
 /* Each load gets a number. A load that a newer one replaced is cancelled, and its result is ignored. */
 let loadSeq = 0;
 /** Parameters (and scale) from a session whose source file has not been loaded yet. */
@@ -461,6 +534,7 @@ $('#scale-input').addEventListener('change', (e) => {
 function caption(s) {
   if (!s) return ['', ''];
   if (s.synthetic) return [s.name, ' — synthetic study volume'];
+  if (s.kind === 'template') return [s.name, ' — cane template'];
   if (s.kind === 'mesh') return [s.name, ` — mesh, ${s.mesh.triangles.toLocaleString('en')} triangles`];
   if (s.kind === 'volume') return [s.name, ` — volume, ${s.volume.dims.join(' × ')}`];
   return [s.name, ' — image'];
@@ -474,7 +548,10 @@ app.on('source', (s) => {
   $$('#specimen-list button').forEach((b) => b.classList.toggle('on', !!(s && s.synthetic && s.synthetic.id === b.dataset.id)));
   body.classList.toggle('no-source', !s);
   body.classList.toggle('no-volume', !s || s.kind !== 'volume');
-  body.classList.toggle('no-plane', !s || s.kind === 'image');
+  body.classList.toggle('no-plane', !s || s.kind === 'image' || s.kind === 'template');
+  body.classList.toggle('is-template', !!(s && s.kind === 'template'));
+  $$('#template-list button').forEach((b) => b.classList.toggle('on', !!(s && s.kind === 'template' && s.template.id === b.dataset.id)));
+  if (s && s.kind === 'template') renderTemplateParams();
   $('#plane-controls').hidden = !!(s && s.kind === 'image');
   $('#plane-none').hidden = !(s && s.kind === 'image');
   renderFacts($('#source-facts'), app);
@@ -499,6 +576,7 @@ app.on('source', (s) => {
     if (mode === 'section' && !usingFlat()) stage.frame(false);
   }
   Object.keys(dirty).forEach((k) => { dirty[k] = true; });
+  refreshView(true, false);
   panels.place();
 });
 
@@ -565,7 +643,9 @@ function applySession(obj) {
   app.params = r.params;
   app.autoThresholds = r.params.thresholds.length === 0;
   drawPalette();
-  if (r.source && r.source.synthetic && SPECIMENS.some((s) => s.id === r.source.synthetic.id)) {
+  if (r.source && r.source.kind === 'template' && getTemplate(r.source.id)) {
+    loadTemplate(r.source.id, r.source.values, true);
+  } else if (r.source && r.source.synthetic && SPECIMENS.some((s) => s.id === r.source.synthetic.id)) {
     showNote('');
     app.keepParams = true;
     loadSynthetic(r.source.synthetic.id);
@@ -578,7 +658,7 @@ function applySession(obj) {
     if (app.source) app.invalidate('slice');
   }
   syncAll();
-  if (!r.source || r.source.synthetic) toast('Session loaded.');
+  if (!r.source || r.source.synthetic || r.source.kind === 'template') toast('Session loaded.');
 }
 
 $('#session-input').addEventListener('change', async (e) => {
@@ -628,7 +708,7 @@ installShortcuts({
   escape: () => { if (panels.isOpen) panels.close(true); else if (today.isOpen) today.close(); else cancelLoad(); },
   mode: (e) => { if (!editing()) setMode(['section', 'cane', 'pattern'][+e.key - 1]); },
   offset: (e) => {
-    if (editing() || !app.source || app.source.kind === 'image') return;
+    if (editing() || !app.source || app.source.kind === 'image' || isTemplate()) return;
     const r = app.offsetRange();
     const step = (e.shiftKey ? 10 : 1) * Math.max(r / 100, 1e-3);
     const p = app.params.plane;
@@ -637,7 +717,7 @@ installShortcuts({
     syncAll();
   },
   tilt: (e) => {
-    if (editing() || !app.source || app.source.kind === 'image') return;
+    if (editing() || !app.source || app.source.kind === 'image' || isTemplate()) return;
     const p = app.params.plane;
     const k = e.shiftKey ? 'tiltB' : 'tiltA';
     p[k] = Math.max(-80, Math.min(80, p[k] + (e.key === 'ArrowRight' ? 1 : -1)));
@@ -651,7 +731,7 @@ installShortcuts({
       app.params.slab.n = Math.max(1, Math.min(32, app.params.slab.n + d));
       app.changed('slab.n');
       syncAll();
-    } else setLevels(app.params.levels + d);
+    } else if (!isTemplate()) setLevels(app.params.levels + d);
   },
   random: () => { if (today.isOpen) $('#today-random').click(); else randomPlane(); },
   save: () => { if (!editing()) doExport('session-save'); },
@@ -694,7 +774,8 @@ syncAll();
 body.classList.add('no-source', 'no-volume', 'not-loaf');
 setMode(still || 'cane');
 const start = query.get('specimen');
-loadSynthetic(SPECIMENS.some((s) => s.id === start) ? start : 'osteon');
+if (getTemplate(query.get('template'))) loadTemplate(query.get('template'));
+else loadSynthetic(SPECIMENS.some((s) => s.id === start) ? start : 'osteon');
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
