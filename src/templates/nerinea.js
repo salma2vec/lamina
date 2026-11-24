@@ -35,8 +35,8 @@ export const nerinea = {
       options: [
         { id: 'none', name: 'None' },
         { id: 'columellar', name: 'Columellar' },
-        { id: 'two', name: 'Columellar and parietal' },
-        { id: 'three', name: 'Columellar, parietal and palatal' },
+        { id: 'two', name: 'Columellar + parietal' },
+        { id: 'three', name: 'All three' },
       ],
     },
     { key: 'depth', label: 'Plait depth', type: 'range', min: 0.1, max: 0.6, step: 0.05, default: 0.4 },

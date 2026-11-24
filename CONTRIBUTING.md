@@ -86,7 +86,7 @@ The object is the subject. The viewport fills the screen; tools sit in thin tool
 
 Keys are handled in `src/ui/shortcuts.js` and listed in the Help panel (`index.html`). If you change a key, change the Help panel and the README table too.
 
-`?still=section|cane|pattern` hides the interface for a still image. Add `&specimen=<id>` or `&template=<id>` to choose the subject. `docs/hero.png` is `?still=cane&template=ammonite` at 1600 × 1000.
+`?still=section|cane|pattern` hides the interface for a still image. Add `&specimen=<id>` or `&template=<id>` to choose the subject. README images are captured from the live app at 1440 × 900.
 
 ## Copy rules
 
